@@ -1,0 +1,4 @@
+build/
+slcl
+*.o
+*.d

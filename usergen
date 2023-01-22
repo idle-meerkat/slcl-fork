@@ -1,0 +1,29 @@
+#! /bin/sh
+
+echo Username: >&2
+read -r USER
+echo Password: >&2
+read -r PWD
+
+PWD=$(printf '%s' $PWD | xxd -p | tr -d '\n')
+SALT=$(openssl rand 32 | xxd -p | tr -d '\n')
+KEY=$(openssl rand 32 | xxd -p | tr -d '\n')
+PWD=$(printf '%s%s' $SALT $PWD)
+
+ROUNDS=1000
+
+for i in $(seq $ROUNDS)
+do
+    printf "\r%d/$ROUNDS" $i >&2
+    PWD=$(printf '%s' $PWD | xxd -p -r | sha256sum | cut -d' ' -f1)
+done
+
+echo >&2
+cat <<-EOF
+{
+    "name": "$USER",
+    "password": "$PWD",
+    "salt": "$SALT",
+    "key": "$KEY"
+}
+EOF

@@ -1,0 +1,123 @@
+.TH SLCL 1 slcl
+
+.SH NAME
+slcl \- a suckless cloud
+
+.SH SYNOPSIS
+.B slcl
+.RB [-t
+.IR tmpdir ]
+.RB [-p
+.IR port ]
+.RB dir
+
+.SH DESCRIPTION
+.B slcl
+is a simple and fast implementation of a web file server, commonly
+known as "cloud storage" or simply "cloud", that takes a directory
+.IR dir
+where the credentials database and user files are stored (see
+.B FILES
+below).
+
+.SH OPTIONS
+.BI \-t " tmpdir"
+Defines the directory where temporary files created by
+.B slcl
+are stored. If not specified, the environment variable
+.I TMPDIR
+is selected. However, if no value is available for
+.IR TMPDIR ,
+.I /tmp
+is selected.
+
+.BI \-p " port"
+Defines the TCP
+.I port
+.B slcl
+will listen to. If not specified, a random port is used.
+
+.SH FILES
+
+.B slcl
+consumes a path to a directory with the following tree structure:
+
+.PP
+.EX
+\ .
+ ├── db.json
+ ├── public/
+ └── user/
+.EE
+
+Where:
+
+.TP
+.B db.json
+This file is the credentials database, in JSON.
+.B Note:
+if not found,
+.B slcl
+creates a database with no users, with file mode bits set to
+.IR 0600 .
+The following schema is expected:
+.PP
+.EX
+{
+    "users": [{
+        "name":	"...",
+        "password":	"...",
+        "salt":	"...",
+        "key":	"..."
+    }]
+}
+.EE
+
+.TP
+.B public/
+This directory contains read-only files that can be accessed without
+authentication, implemented as symlinks to other files in
+.BR user/ .
+.B Note:
+this directory must be created before running
+.BR slcl .
+
+.TP
+.B user/
+This directory contains user directories, which in turn contain anything users
+put into them.
+.B Note:
+this directory, as well as any user directories inside it, must be created
+before running
+.BR slcl .
+
+.SH EXAMPLES
+
+Below, there is an example of a directory with two users, namely
+.I alice
+and
+.IR john ,
+storing one file each, as well as a publicly-shared file by
+.IR alice :
+
+.PP
+.EX
+\ .
+ ├── db.json
+ ├── public
+ │   └── 416d604c03a1cbb2 -> user/alice/file.txt
+ └── user
+     ├── alice
+     │   └── file.txt
+     └── john
+         └── file2.txt
+.EE
+
+.SH LICENSE
+See the LICENSE file for further reference.
+
+.SH AUTHORS
+Written by Xavier Del Campo Romero.
+
+.SH TODO
+Implement user quota and public file sharing.

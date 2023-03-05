@@ -272,23 +272,10 @@ end:
     free(cookie);
     free(forms);
 
-    if (res)
+    if (res && page_failed_login(r))
     {
-        if (page_failed_login(r))
-        {
-            fprintf(stderr, "%s: page_failed_login failed\n", __func__);
-            return -1;
-        }
-        else if (http_response_add_header(r, "Location", "/"))
-        {
-            fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
-            return -1;
-        }
-        else if (http_response_add_header(r, "Content-Type", "text/html"))
-        {
-            fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
-            return -1;
-        }
+        fprintf(stderr, "%s: page_failed_login failed\n", __func__);
+        return -1;
     }
 
     return 0;

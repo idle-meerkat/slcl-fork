@@ -39,11 +39,6 @@
     "       <input type=\"submit\" value=\"Submit\">\n" \
     "   </form>\n"
 
-static void free_response(void *const arg)
-{
-    free(arg);
-}
-
 static int prepare_name(struct html_node *const n, struct stat *const sb,
     const char *const dir, const char *const name)
 {
@@ -608,7 +603,7 @@ static int list_dir(struct http_response *const r, const char *const dir,
         .status = HTTP_STATUS_OK,
         .buf.rw = out.str,
         .n = out.len,
-        .free = free_response
+        .free = free
     };
 
     if (http_response_add_header(r, "Content-Type", "text/html"))

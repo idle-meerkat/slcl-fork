@@ -898,7 +898,7 @@ static int createdir(const struct http_payload *const p,
             {
                 .status = HTTP_STATUS_BAD_REQUEST,
                 .buf.ro = body,
-                .n = strlen(body)
+                .n = sizeof body - 1
             };
 
             if (http_response_add_header(r, "Content-Type", "text/html"))

@@ -295,7 +295,7 @@ int auth_login(const struct auth *const a, const char *const user,
         goto end;
     }
 
-    cJSON *u;
+    const cJSON *u;
 
     cJSON_ArrayForEach(u, users)
     {

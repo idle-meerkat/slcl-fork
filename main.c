@@ -1,4 +1,5 @@
 #include "auth.h"
+#include "cftw.h"
 #include "handler.h"
 #include "http.h"
 #include "page.h"
@@ -351,6 +352,84 @@ static int search(const struct http_payload *const p,
     return -1;
 }
 
+
+static int add_length(const char *const fpath, const struct stat *const sb,
+    void *const user)
+{
+    unsigned long long *const l = user;
+
+    *l += sb->st_size;
+    return 0;
+}
+
+static int quota_current(const struct auth *const a,
+    const char *const username, unsigned long long *const cur)
+{
+    int ret = -1;
+    const char *const adir = auth_dir(a);
+    struct dynstr d;
+
+    dynstr_init(&d);
+
+    if (!adir)
+    {
+        fprintf(stderr, "%s: auth_dir failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "%s/user/%s", adir, username))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        goto end;
+    }
+
+    *cur = 0;
+
+    if (cftw(d.str, add_length, cur))
+    {
+        fprintf(stderr, "%s: cftw: %s\n", __func__, strerror(errno));
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&d);
+    return ret;
+}
+
+static int check_quota(const struct auth *const a, const char *const username,
+    const unsigned long long len, const unsigned long long quota)
+{
+    unsigned long long total;
+
+    if (quota_current(a, username, &total))
+    {
+        fprintf(stderr, "%s: quota_current failed\n", __func__);
+        return -1;
+    }
+
+    return total + len > quota ? 1 : 0;
+}
+
+static int check_length(const unsigned long long len,
+    const struct http_cookie *const c, void *const user)
+{
+    struct auth *const a = user;
+    const char *const username = c->field;
+    bool has_quota;
+    unsigned long long quota;
+
+    if (auth_quota(a, username, &has_quota, &quota))
+    {
+        fprintf(stderr, "%s: auth_quota failed\n", __func__);
+        return -1;
+    }
+    else if (has_quota)
+        return check_quota(a, username, len, quota);
+
+    return 0;
+}
+
 static bool path_isrel(const char *const path)
 {
     if (!strcmp(path, "..") || !strcmp(path, ".") || strstr(path, "/../"))
@@ -458,7 +537,27 @@ static int getnode(const struct http_payload *const p,
         goto end;
     }
 
-    ret = page_resource(r, dir, root.str, d.str);
+    bool available;
+    unsigned long long cur, max;
+
+    if (auth_quota(a, username, &available, &max))
+    {
+        fprintf(stderr, "%s: quota_available failed\n", __func__);
+        goto end;
+    }
+    else if (available && quota_current(a, username, &cur))
+    {
+        fprintf(stderr, "%s: quota_current failed\n", __func__);
+        goto end;
+    }
+
+    const struct page_quota pq =
+    {
+        .cur = cur,
+        .max = max
+    }, *const ppq = available ? &pq : NULL;
+
+    ret = page_resource(r, dir, root.str, d.str, ppq);
 
 end:
     dynstr_free(&d);
@@ -899,8 +998,17 @@ int main(const int argc, char *const argv[])
     unsigned short port;
 
     if (parse_args(argc, argv, &dir, &port, &tmpdir)
-        || !(a = auth_alloc(dir))
-        || !(h = handler_alloc(tmpdir))
+        || !(a = auth_alloc(dir)))
+        goto end;
+
+    const struct handler_cfg cfg =
+    {
+        .length = check_length,
+        .tmpdir = tmpdir,
+        .user = a
+    };
+
+    if (!(h = handler_alloc(&cfg))
         || handler_add(h, "/", HTTP_OP_GET, serve_index, a)
         || handler_add(h, "/index.html", HTTP_OP_GET, serve_index, a)
         || handler_add(h, "/style.css", HTTP_OP_GET, serve_style, NULL)

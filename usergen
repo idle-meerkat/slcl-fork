@@ -1,9 +1,13 @@
 #! /bin/sh
 
+set -e
+
 echo Username: >&2
 read -r USER
 echo Password: >&2
 read -r PWD
+echo "Quota, in MiB (leave empty for unlimited quota):" >&2
+read -r QUOTA
 
 PWD=$(printf '%s' $PWD | xxd -p | tr -d '\n')
 SALT=$(openssl rand 32 | xxd -p | tr -d '\n')
@@ -24,6 +28,7 @@ cat <<-EOF
     "name": "$USER",
     "password": "$PWD",
     "salt": "$SALT",
-    "key": "$KEY"
+    "key": "$KEY",
+    "quota": "$QUOTA"
 }
 EOF

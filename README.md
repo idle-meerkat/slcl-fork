@@ -11,7 +11,7 @@ simplicity and efficiency.
 
 ## Features
 
-- Private access directory with file uploading.
+- Private access directory with file uploading, with configurable quota.
 - Read-only public file sharing.
 - Its own, tiny HTTP/1.0 and 1.1-compatible server.
 - A simple JSON file as the credentials database.
@@ -128,15 +128,17 @@ schema:
         "name":	"...",
         "password":	"...",
         "salt":	"...",
-        "key":	"..."
+        "key":	"...",
+        "quota": "..."
     }]
 }
 ```
 
-[`usergen`](usergen) is an interactive script that consumes a username and
-password, and writes a JSON object that can be appended to the `users` JSON
-array in `db.json`. A salt is randomly generated using `openssl` and passwords
-are hashed multiple times beforehand - see [`usergen`](usergen) and
+[`usergen`](usergen) is an interactive script that consumes a username, a
+password and, optionally, a user quota in MiB. Then, [`usergen`](usergen)
+writes a JSON object that can be appended to the `users` JSON array in
+`db.json`. A salt is randomly generated using `openssl` and passwords are
+hashed multiple times beforehand - see [`usergen`](usergen) and
 [`auth.c`](/auth.c) for further reference. Also, a random key is generated
 that is later used to sign HTTP cookies.
 

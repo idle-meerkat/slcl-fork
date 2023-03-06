@@ -13,6 +13,7 @@ add_executable(${PROJECT_NAME}
     server.c
 )
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall)
+target_compile_definitions(${PROJECT_NAME} PRIVATE _FILE_OFFSET_BITS=64)
 add_subdirectory(dynstr)
 find_package(cJSON 1.0 REQUIRED)
 find_package(OpenSSL 3.0 REQUIRED)

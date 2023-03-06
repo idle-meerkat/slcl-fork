@@ -372,6 +372,97 @@ const char *auth_dir(const struct auth *const a)
     return a->dir.str;
 }
 
+int auth_quota(const struct auth *const a, const char *const user,
+    bool *const available, unsigned long long *const quota)
+{
+    int ret = -1;
+    const char *const path = a->db.str;
+    char *const db = dump_db(path);
+    cJSON *json = NULL;
+
+    if (!db)
+    {
+        fprintf(stderr, "%s: dump_db failed\n", __func__);
+        goto end;
+    }
+    else if (!(json = cJSON_Parse(db)))
+    {
+        fprintf(stderr, "%s: cJSON_Parse failed\n", __func__);
+        goto end;
+    }
+
+    const cJSON *const users = cJSON_GetObjectItem(json, "users");
+
+    if (!users)
+    {
+        fprintf(stderr, "%s: could not find users\n", __func__);
+        goto end;
+    }
+    else if (!cJSON_IsArray(users))
+    {
+        fprintf(stderr, "%s: expected JSON array for users\n", __func__);
+        goto end;
+    }
+
+    *available = false;
+
+    const cJSON *u;
+
+    cJSON_ArrayForEach(u, users)
+    {
+        const cJSON *const n = cJSON_GetObjectItem(u, "name"),
+            *const q = cJSON_GetObjectItem(u, "quota");
+        const char *name;
+
+        if (!n || !(name = cJSON_GetStringValue(n)))
+        {
+            fprintf(stderr, "%s: missing username\n", __func__);
+            goto end;
+        }
+        else if (!strcmp(name, user))
+        {
+            const char *qs;
+
+            if (!q || !(qs = cJSON_GetStringValue(q)) || !*qs)
+            {
+                /* Unlimited quota. */
+                ret = 0;
+                goto end;
+            }
+
+            char *end;
+
+            errno = 0;
+            *available = true;
+            *quota = strtoull(qs, &end, 10);
+
+            const unsigned long long mul = 1024 * 1024;
+
+            if (errno || *end != '\0')
+            {
+                fprintf(stderr, "%s: invalid quota %s: %s\n",
+                    __func__, qs, strerror(errno));
+                goto end;
+            }
+            else if (*quota >= ULLONG_MAX / mul)
+            {
+                fprintf(stderr, "%s: quota %s too large\n", __func__, qs);
+                goto end;
+            }
+
+            *quota *= 1024 * 1024;
+            break;
+        }
+    }
+
+    ret = 0;
+
+end:
+    free(db);
+    cJSON_Delete(json);
+    return ret;
+}
+
 static int create_db(const char *const path)
 {
     int ret = -1;

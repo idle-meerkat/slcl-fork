@@ -374,6 +374,97 @@ static int prepare_mkdir_form(struct html_node *const n, const char *const dir)
     return 0;
 }
 
+static int prepare_quota_form(struct html_node *const n,
+    const struct page_quota *const q)
+{
+    int ret = -1;
+    struct html_node *progress = NULL, *div, *label;
+    char cur[sizeof "18446744073709551615"], max[sizeof cur];
+    int res = snprintf(cur, sizeof cur, "%llu", q->cur);
+    struct dynstr d, pd;
+
+    dynstr_init(&d);
+    dynstr_init(&pd);
+
+    if (res < 0 || res >= sizeof cur)
+    {
+        fprintf(stderr, "%s: snprintf(3) cur failed\n", __func__);
+        goto end;
+    }
+
+    res = snprintf(max, sizeof max, "%llu", q->max);
+
+    if (res < 0 || res >= sizeof cur)
+    {
+        fprintf(stderr, "%s: snprintf(3) max failed\n", __func__);
+        goto end;
+    }
+    else if (!(div = html_node_add_child(n, "div")))
+    {
+        fprintf(stderr, "%s: html_node_add_child div failed\n", __func__);
+        goto end;
+    }
+    else if (!(label = html_node_add_child(div, "label")))
+    {
+        fprintf(stderr, "%s: html_node_add_child label failed\n", __func__);
+        goto end;
+    }
+    else if (!(progress = html_node_alloc("progress")))
+    {
+        fprintf(stderr, "%s: html_node_alloc progress failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(progress, "value", cur))
+    {
+        fprintf(stderr, "%s: html_node_add_attr value failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(progress, "max", max))
+    {
+        fprintf(stderr, "%s: html_node_add_attr max failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&pd, "%llu/%llu bytes", q->cur, q->max))
+    {
+        fprintf(stderr, "%s: dynstr_append pd failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_set_value(progress, pd.str))
+    {
+        fprintf(stderr, "%s: html_node_set_value progress failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "File quota: "))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        goto end;
+    }
+    else if (html_serialize(progress, &d))
+    {
+        fprintf(stderr, "%s: html_serialize failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "%s", pd.str))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_set_value_unescaped(label, d.str))
+    {
+        fprintf(stderr, "%s: html_node_set_value_unescaped label failed\n",
+            __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    html_node_free(progress);
+    dynstr_free(&d);
+    dynstr_free(&pd);
+    return ret;
+}
+
 static int prepare_logout_form(struct html_node *const n)
 {
     struct html_node *div, *form, *input;
@@ -470,7 +561,8 @@ end:
 }
 
 static int list_dir(struct http_response *const r, const char *const dir,
-    const char *const root, const char *const res)
+    const char *const root, const char *const res,
+    const struct page_quota *const q)
 {
     int ret = -1;
     DIR *const d = opendir(res);
@@ -558,6 +650,11 @@ static int list_dir(struct http_response *const r, const char *const dir,
     else if (prepare_mkdir_form(body, fdir))
     {
         fprintf(stderr, "%s: prepare_upload_form failed\n", __func__);
+        goto end;
+    }
+    else if (q && prepare_quota_form(body, q))
+    {
+        fprintf(stderr, "%s: prepare_quota_form failed\n", __func__);
         goto end;
     }
     else if (prepare_logout_form(body))
@@ -652,7 +749,8 @@ static int serve_file(struct http_response *const r,
 }
 
 int page_resource(struct http_response *const r, const char *const dir,
-    const char *const root, const char *const res)
+    const char *const root, const char *const res,
+    const struct page_quota *const q)
 {
     struct stat sb;
 
@@ -677,7 +775,7 @@ int page_resource(struct http_response *const r, const char *const dir,
     const mode_t m = sb.st_mode;
 
     if (S_ISDIR(m))
-        return list_dir(r, dir, root, res);
+        return list_dir(r, dir, root, res, q);
     else if (S_ISREG(m))
         return serve_file(r, &sb, res);
 

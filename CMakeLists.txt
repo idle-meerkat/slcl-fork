@@ -3,6 +3,7 @@ project(slcl)
 add_executable(${PROJECT_NAME}
     auth.c
     base64.c
+    cftw.c
     handler.c
     html.c
     http.c

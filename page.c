@@ -560,26 +560,17 @@ end:
     return ret;
 }
 
-static int list_dir(struct http_response *const r, const char *const dir,
-    const char *const root, const char *const res,
-    const struct page_quota *const q)
+static struct html_node *resource_layout(const char *const dir,
+    const struct page_quota *const q, struct html_node **const table)
 {
-    int ret = -1;
-    DIR *const d = opendir(res);
-    struct html_node *const html = html_node_alloc("html"),
-        *head, *title, *body, *charset, *viewport, *table;
-    struct dynstr out, t;
     const char *const fdir = dir + strlen("/user");
+    struct html_node *const html = html_node_alloc("html"),
+        *ret = NULL, *head, *title, *body, *charset, *viewport;
+    struct dynstr t;
 
-    dynstr_init(&out);
     dynstr_init(&t);
 
-    if (!d)
-    {
-        fprintf(stderr, "%s: opendir(2): %s\n", __func__, strerror(errno));
-        goto end;
-    }
-    else if (!html)
+    if (!html)
     {
         fprintf(stderr, "%s: html_node_alloc_failed\n", __func__);
         goto end;
@@ -594,7 +585,7 @@ static int list_dir(struct http_response *const r, const char *const dir,
         fprintf(stderr, "%s: html_node_add_child body failed\n", __func__);
         goto end;
     }
-    else if (!(table = html_node_add_child(body, "table")))
+    else if (!(*table = html_node_add_child(body, "table")))
     {
         fprintf(stderr, "%s: html_node_add_child table failed\n", __func__);
         goto end;
@@ -668,10 +659,33 @@ static int list_dir(struct http_response *const r, const char *const dir,
         goto end;
     }
 
-    struct dirent *de;
+    ret = html;
 
-    while ((de = readdir(d)))
+end:
+    dynstr_free(&t);
+
+    if (!ret)
+        html_node_free(html);
+
+    return ret;
+}
+
+static int add_elements(const char *const root, const char *const res,
+    const char *const dir, struct html_node *const table)
+{
+    int ret = -1;
+    struct dirent **pde = NULL;
+    const int n = scandir(res, &pde, NULL, alphasort);
+
+    if (n < 0)
     {
+        fprintf(stderr, "%s: scandir(3): %s\n", __func__, strerror(errno));
+        goto end;
+    }
+
+    for (int i = 0; i < n; i++)
+    {
+        const struct dirent *const de = pde[i];
         const char *const name = de->d_name;
 
         if (!strcmp(name, ".")
@@ -684,7 +698,38 @@ static int list_dir(struct http_response *const r, const char *const dir,
         }
     }
 
-    if (dynstr_append(&out, DOCTYPE_TAG))
+    ret = 0;
+
+end:
+
+    for (int i = 0; i < n; i++)
+        free(pde[i]);
+
+    free(pde);
+    return ret;
+}
+
+static int list_dir(struct http_response *const r, const char *const dir,
+    const char *const root, const char *const res,
+    const struct page_quota *const q)
+{
+    int ret = -1;
+    struct dynstr out;
+    struct html_node *table, *const html = resource_layout(dir, q, &table);
+
+    dynstr_init(&out);
+
+    if (!html)
+    {
+        fprintf(stderr, "%s: resource_layout failed\n", __func__);
+        goto end;
+    }
+    else if (add_elements(root, res, dir, table))
+    {
+        fprintf(stderr, "%s: read_elements failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&out, DOCTYPE_TAG))
     {
         fprintf(stderr, "%s: dynstr_prepend failed\n", __func__);
         goto end;
@@ -713,16 +758,9 @@ static int list_dir(struct http_response *const r, const char *const dir,
 
 end:
     html_node_free(html);
-    dynstr_free(&t);
 
     if (ret)
         dynstr_free(&out);
-
-    if (closedir(d))
-    {
-        fprintf(stderr, "%s: closedir(2): %s\n", __func__, strerror(errno));
-        return -1;
-    }
 
     return ret;
 }

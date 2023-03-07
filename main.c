@@ -889,10 +889,11 @@ static int createdir(const struct http_payload *const p,
     }
     else if (mkdir(d.str, 0700))
     {
-        fprintf(stderr, "%s: mkdir(2): %s\n", __func__, strerror(errno));
-
         if (errno != EEXIST)
+        {
+            fprintf(stderr, "%s: mkdir(2): %s\n", __func__, strerror(errno));
             goto end;
+        }
         else
         {
             static const char body[] = "<html>Directory already exists</html>";

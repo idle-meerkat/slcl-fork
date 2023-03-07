@@ -38,6 +38,7 @@
     "           id=\"password\" name=\"password\"><br>\n" \
     "       <input type=\"submit\" value=\"Submit\">\n" \
     "   </form>\n"
+#define MAXSIZEFMT "18446744073709551615.0 XiB"
 
 static int prepare_name(struct html_node *const n, struct stat *const sb,
     const char *const dir, const char *const name)
@@ -84,29 +85,44 @@ end:
     return ret;
 }
 
-static int prepare_size(struct html_node *const n, const struct stat *const sb)
+static int size_units(const unsigned long long b, char *const buf,
+    const size_t n)
 {
-    if (!S_ISREG(sb->st_mode))
-        return 0;
-
+    static const char *const suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB"};
     float sz;
     size_t suffix_i;
 
-    for (sz = sb->st_size, suffix_i = 0; (off_t)sz / 1024;
+    for (sz = b, suffix_i = 0; (unsigned long long)sz / 1024;
         suffix_i++, sz /= 1024.0f)
         ;
 
-    static const char *const suffixes[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    if (suffix_i >= sizeof suffixes / sizeof *suffixes)
+    {
+        fprintf(stderr, "%s: maximum suffix exceeded\n", __func__);
+        return -1;
+    }
 
-    char buf[sizeof "18446744073709551615.0 XiB"];
     const int r = suffix_i ?
-        snprintf(buf, sizeof buf, "%.1f %s", sz, suffixes[suffix_i])
-        : snprintf(buf, sizeof buf, "%ju %s",
-            (uintmax_t)sb->st_size, suffixes[suffix_i]);
+        snprintf(buf, n, "%.1f %s", sz, suffixes[suffix_i])
+        : snprintf(buf, n, "%llu %s", b, suffixes[suffix_i]);
 
-    if (r >= sizeof buf || r < 0)
+    if (r >= n || r < 0)
     {
         fprintf(stderr, "%s: snprintf(3) failed with %d\n", __func__, r);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int prepare_size(struct html_node *const n, const struct stat *const sb)
+{
+    char buf[sizeof MAXSIZEFMT] = "";
+
+    if (S_ISREG(sb->st_mode)
+        && size_units(sb->st_size, buf, sizeof buf))
+    {
+        fprintf(stderr, "%s: size_units failed\n", __func__);
         return -1;
     }
     else if (html_node_set_value(n, buf))
@@ -379,24 +395,38 @@ static int prepare_quota_form(struct html_node *const n,
 {
     int ret = -1;
     struct html_node *progress = NULL, *div, *label;
-    char cur[sizeof "18446744073709551615"], max[sizeof cur];
-    int res = snprintf(cur, sizeof cur, "%llu", q->cur);
+    char cur[sizeof MAXSIZEFMT], max[sizeof cur],
+        cur_nu[sizeof "18446744073709551615"], max_nu[sizeof cur_nu];
+    int res = snprintf(cur_nu, sizeof cur_nu, "%llu", q->cur);
+
     struct dynstr d, pd;
 
     dynstr_init(&d);
     dynstr_init(&pd);
 
-    if (res < 0 || res >= sizeof cur)
+    if (res < 0 || res >= sizeof cur_nu)
     {
-        fprintf(stderr, "%s: snprintf(3) cur failed\n", __func__);
+        fprintf(stderr, "%s: snprintf(3) cur_nu failed with %d\n",
+            __func__, res);
         goto end;
     }
 
-    res = snprintf(max, sizeof max, "%llu", q->max);
+    res = snprintf(max_nu, sizeof max_nu, "%llu", q->max);
 
-    if (res < 0 || res >= sizeof cur)
+    if (res < 0 || res >= sizeof max_nu)
     {
-        fprintf(stderr, "%s: snprintf(3) max failed\n", __func__);
+        fprintf(stderr, "%s: snprintf(3) max_nu failed with %d\n",
+            __func__, res);
+        goto end;
+    }
+    else if (size_units(q->cur, cur, sizeof cur))
+    {
+        fprintf(stderr, "%s: size_units cur failed\n", __func__);
+        goto end;
+    }
+    else if (size_units(q->max, max, sizeof max))
+    {
+        fprintf(stderr, "%s: size_units max failed\n", __func__);
         goto end;
     }
     else if (!(div = html_node_add_child(n, "div")))
@@ -414,17 +444,17 @@ static int prepare_quota_form(struct html_node *const n,
         fprintf(stderr, "%s: html_node_alloc progress failed\n", __func__);
         goto end;
     }
-    else if (html_node_add_attr(progress, "value", cur))
+    else if (html_node_add_attr(progress, "value", cur_nu))
     {
         fprintf(stderr, "%s: html_node_add_attr value failed\n", __func__);
         goto end;
     }
-    else if (html_node_add_attr(progress, "max", max))
+    else if (html_node_add_attr(progress, "max", max_nu))
     {
         fprintf(stderr, "%s: html_node_add_attr max failed\n", __func__);
         goto end;
     }
-    else if (dynstr_append(&pd, "%llu/%llu bytes", q->cur, q->max))
+    else if (dynstr_append(&pd, "%s/%s", cur, max))
     {
         fprintf(stderr, "%s: dynstr_append pd failed\n", __func__);
         goto end;
@@ -434,7 +464,7 @@ static int prepare_quota_form(struct html_node *const n,
         fprintf(stderr, "%s: html_node_set_value progress failed\n", __func__);
         goto end;
     }
-    else if (dynstr_append(&d, "File quota: "))
+    else if (dynstr_append(&d, "User quota: "))
     {
         fprintf(stderr, "%s: dynstr_append failed\n", __func__);
         goto end;

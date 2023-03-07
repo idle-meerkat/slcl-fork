@@ -10,13 +10,14 @@
 int cftw(const char *const dirpath, int (*const fn)(const char *,
     const struct stat *, void *), void *const user)
 {
+    int ret = -1;
     DIR *const d = opendir(dirpath);
     struct dirent *de;
 
     if (!d)
     {
         fprintf(stderr, "%s: opendir(2): %s\n", __func__, strerror(errno));
-        return -1;
+        goto end;
     }
 
     while ((de = readdir(d)))
@@ -38,7 +39,6 @@ int cftw(const char *const dirpath, int (*const fn)(const char *,
         }
 
         const int r = stat(d.str, &sb);
-        int ret = -1;
 
         if (r)
             fprintf(stderr, "%s: stat(2) %s: %s\n",
@@ -54,8 +54,18 @@ int cftw(const char *const dirpath, int (*const fn)(const char *,
         dynstr_free(&d);
 
         if (ret)
-            return ret;
+            goto end;
     }
 
-    return 0;
+    ret = 0;
+
+end:
+
+    if (d && closedir(d))
+    {
+        fprintf(stderr, "%s: closedir(2): %s\n", __func__, strerror(errno));
+        ret = -1;
+    }
+
+    return ret;
 }

@@ -177,11 +177,17 @@ static struct form *get_forms(const struct http_payload *const pl,
     *outn = 0;
 
     while (*s)
-        if (!(forms = append_form(forms, &s, outn)))
+    {
+        struct form *const f = append_form(forms, &s, outn);
+
+        if (!f)
         {
             fprintf(stderr, "%s: append_form failed\n", __func__);
             goto failure;
         }
+
+        forms = f;
+    }
 
     free(dup);
     return forms;

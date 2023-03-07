@@ -77,6 +77,15 @@ static char *alloc_form_data(const char *const s, const char **const end)
     return data;
 }
 
+static void form_free(struct form *const f)
+{
+    if (f)
+    {
+        free(f->key);
+        free(f->value);
+    }
+}
+
 static struct form *append_form(struct form *forms, const char **const s,
     size_t *const n)
 {
@@ -144,11 +153,8 @@ end:
     free(value);
     free(data);
 
-    if (!ret && f)
-    {
-        free(f->key);
-        free(f->value);
-    }
+    if (!ret)
+        form_free(f);
 
     return ret;
 }
@@ -797,26 +803,34 @@ static int upload(const struct http_payload *const p,
 static int createdir(const struct http_payload *const p,
     struct http_response *const r, void *const user)
 {
+    int ret = -1;
     struct auth *const a = user;
+    struct dynstr d, userd;
+    struct form *forms = NULL;
+
+    dynstr_init(&d);
+    dynstr_init(&userd);
 
     if (auth_cookie(a, &p->cookie))
     {
         fprintf(stderr, "%s: auth_cookie failed\n", __func__);
-        return page_forbidden(r);
+        ret = page_forbidden(r);
+        goto end;
     }
 
     size_t n;
-    struct form *const forms = get_forms(p, &n);
 
-    if (!forms)
+    if (!(forms = get_forms(p, &n)))
     {
         fprintf(stderr, "%s: get_forms failed\n", __func__);
-        return page_bad_request(r);
+        ret = page_bad_request(r);
+        goto end;
     }
     else if (n != 2)
     {
         fprintf(stderr, "%s: expected 2 forms, got %zu\n", __func__, n);
-        return page_bad_request(r);
+        ret = page_bad_request(r);
+        goto end;
     }
 
     char *name = NULL, *dir = NULL;
@@ -832,24 +846,28 @@ static int createdir(const struct http_payload *const p,
         else
         {
             fprintf(stderr, "%s: unexpected key %s\n", __func__, f->key);
-            return page_bad_request(r);
+            ret = page_bad_request(r);
+            goto end;
         }
     }
 
     if (!name || !dir)
     {
         fprintf(stderr, "%s: missing name or directory\n", __func__);
-        return page_bad_request(r);
+        ret = page_bad_request(r);
+        goto end;
     }
     else if (path_isrel(name) || strpbrk(name, "/*"))
     {
         fprintf(stderr, "%s: invalid directory name %s\n", __func__, dir);
-        return page_bad_request(r);
+        ret = page_bad_request(r);
+        goto end;
     }
     else if (path_isrel(dir) || strchr(dir, '*'))
     {
         fprintf(stderr, "%s: invalid name %s\n", __func__, name);
-        return page_bad_request(r);
+        ret = page_bad_request(r);
+        goto end;
     }
 
     /* HTML input forms use '+' for whitespace, rather than %20. */
@@ -870,14 +888,8 @@ static int createdir(const struct http_payload *const p,
         fprintf(stderr, "%s: auth_dir failed\n", __func__);
         return -1;
     }
-
-    int ret = -1;
-    struct dynstr d, userd;
-
-    dynstr_init(&d);
-    dynstr_init(&userd);
-
-    if (dynstr_append(&d, "%s/user/%s/%s%s", root, p->cookie.field, dir, name))
+    else if (dynstr_append(&d, "%s/user/%s/%s%s",
+        root, p->cookie.field, dir, name))
     {
         fprintf(stderr, "%s: dynstr_append d failed\n", __func__);
         goto end;
@@ -924,16 +936,16 @@ static int createdir(const struct http_payload *const p,
             fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
             goto end;
         }
-        else if (http_response_add_header(r, "Content-Type", "text/html"))
-        {
-            fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
-            return -1;
-        }
     }
 
     ret = 0;
 
 end:
+    if (forms)
+        for (size_t i = 0; i < n; i++)
+            form_free(&forms[i]);
+
+    free(forms);
     dynstr_free(&userd);
     dynstr_free(&d);
     return ret;

@@ -819,8 +819,7 @@ static int createdir(const struct http_payload *const p,
         return page_bad_request(r);
     }
 
-    char *name = NULL;
-    const char *dir = NULL;
+    char *name = NULL, *dir = NULL;
 
     for (size_t i = 0; i < n; i++)
     {
@@ -855,10 +854,13 @@ static int createdir(const struct http_payload *const p,
 
     /* HTML input forms use '+' for whitespace, rather than %20. */
     {
-        char *c = name;
+        char *c = name, *d = dir;
 
         while ((c = strchr(c, '+')))
             *c = ' ';
+
+        while ((d = strchr(d, '+')))
+            *d = ' ';
     }
 
     const char *const root = auth_dir(a);

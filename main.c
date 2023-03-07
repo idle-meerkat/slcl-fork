@@ -144,15 +144,10 @@ end:
     free(value);
     free(data);
 
-    if (!ret)
+    if (!ret && f)
     {
-        if (f)
-        {
-            free(f->key);
-            free(f->value);
-        }
-
-        return NULL;
+        free(f->key);
+        free(f->value);
     }
 
     return ret;

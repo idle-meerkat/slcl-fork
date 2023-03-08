@@ -638,11 +638,6 @@ end:
         fprintf(stderr, "%s: fclose(3): %s\n", __func__, strerror(errno));
         ret = -1;
     }
-    else if (remove(old))
-    {
-        fprintf(stderr, "%s: remove(3): %s\n", __func__, strerror(errno));
-        ret = -1;
-    }
 
     return ret;
 }

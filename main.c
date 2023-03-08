@@ -483,24 +483,7 @@ static int getnode(const struct http_payload *const p,
     if (auth_cookie(a, &p->cookie))
     {
         fprintf(stderr, "%s: auth_cookie failed\n", __func__);
-
-        *r = (const struct http_response)
-        {
-            .status = HTTP_STATUS_SEE_OTHER
-        };
-
-        if (http_response_add_header(r, "Location", "/"))
-        {
-            fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
-            return -1;
-        }
-        else if (http_response_add_header(r, "Content-Type", "text/html"))
-        {
-            fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
-            return -1;
-        }
-
-        return 0;
+        return page_forbidden(r);
     }
 
     const char *const username = p->cookie.field,

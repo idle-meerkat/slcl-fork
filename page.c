@@ -18,7 +18,7 @@
 #define DOCTYPE_TAG "<!DOCTYPE html>\n"
 #define PROJECT_NAME "slcl"
 #define PROJECT_URL "https://gitea.privatedns.org/Xavi92/" PROJECT_NAME
-#define LOGIN_HEAD \
+#define COMMON_HEAD \
     "   <meta charset=\"UTF-8\">\n" \
     "   <meta name=\"viewport\"\n" \
     "       content=\"width=device-width, initial-scale=1,\n" \
@@ -857,7 +857,7 @@ int page_failed_login(struct http_response *const r)
         DOCTYPE_TAG
         "<html>\n"
         "   <head>\n"
-        "       " LOGIN_HEAD "\n"
+        "       " COMMON_HEAD "\n"
         "       " STYLE_A "\n"
         "   </head>\n"
         "   <p>Invalid username or password.</p>\n"
@@ -887,7 +887,7 @@ int page_login(struct http_response *const r)
         "<html>\n"
         "   <head>\n"
         "       " STYLE_A "\n"
-        "       " LOGIN_HEAD "\n"
+        "       " COMMON_HEAD "\n"
         "   </head>\n"
         "   " LOGIN_BODY "\n"
         "</html>\n";
@@ -913,6 +913,10 @@ int page_forbidden(struct http_response *const r)
     static const char body[] =
         DOCTYPE_TAG
         "<html>\n"
+        "   <head>\n"
+        "       " PROJECT_TITLE "\n"
+        "       " COMMON_HEAD "\n"
+        "   </head>\n"
             "Forbidden\n"
         "</html>";
 

@@ -451,30 +451,6 @@ static bool path_isrel(const char *const path)
     return false;
 }
 
-static char *cust_dirname(char *const d)
-{
-    /*
-        path       dirname   cust_dirname
-        /usr/lib   /usr      /usr/
-        /usr/      /         /usr/
-        usr        .         .
-        /          /         /
-        .          .         .
-        ..         .         .
-    */
-
-    if (!strcmp(d, "."))
-        return d;
-
-    char *const s = strrchr(d, '/');
-
-    if (!s)
-        return ".";
-
-    *(s + 1) = '\0';
-    return d;
-}
-
 static int getnode(const struct http_payload *const p,
     struct http_response *const r, void *const user)
 {
@@ -496,10 +472,11 @@ static int getnode(const struct http_payload *const p,
     }
 
     int ret = -1;
-    struct dynstr root, d;
-    char *const dird = strdup(p->resource), *dir = NULL;
-    const char *const adir = auth_dir(a);
+    struct dynstr dir, root, d;
+    const char *const adir = auth_dir(a),
+        *const sep = p->resource[strlen(p->resource) - 1] != '/' ? "/" : "";
 
+    dynstr_init(&dir);
     dynstr_init(&d);
     dynstr_init(&root);
 
@@ -508,16 +485,9 @@ static int getnode(const struct http_payload *const p,
         fprintf(stderr, "%s: auth_dir failed\n", __func__);
         goto end;
     }
-    else if (!dird)
+    else if (dynstr_append(&dir, "%s%s", p->resource, sep))
     {
-        fprintf(stderr, "%s: strdup(3) failed: %s\n",
-            __func__, strerror(errno));
-        goto end;
-    }
-    else if (!(dir = cust_dirname(dird)))
-    {
-        fprintf(stderr, "%s: dirname(3) failed: %s\n",
-            __func__, strerror(errno));
+        fprintf(stderr, "%s: dynstr_append dird failed\n", __func__);
         goto end;
     }
     else if (dynstr_append(&root, "%s/user/%s/", adir, username)
@@ -547,12 +517,12 @@ static int getnode(const struct http_payload *const p,
         .max = max
     }, *const ppq = available ? &pq : NULL;
 
-    ret = page_resource(r, dir, root.str, d.str, ppq);
+    ret = page_resource(r, dir.str, root.str, d.str, ppq);
 
 end:
+    dynstr_free(&dir);
     dynstr_free(&d);
     dynstr_free(&root);
-    free(dird);
     return ret;
 }
 

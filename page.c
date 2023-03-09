@@ -14,16 +14,17 @@
 #include <string.h>
 #include <time.h>
 
-#define PROJECT_TITLE "<title>slcl, a suckless cloud</title>"
-#define DOCTYPE_TAG "<!DOCTYPE html>\n"
 #define PROJECT_NAME "slcl"
+#define PROJECT_TITLE PROJECT_NAME ", a suckless cloud"
+#define PROJECT_TAG "<title>" PROJECT_TITLE "</title>"
+#define DOCTYPE_TAG "<!DOCTYPE html>\n"
 #define PROJECT_URL "https://gitea.privatedns.org/Xavi92/" PROJECT_NAME
 #define COMMON_HEAD \
     "   <meta charset=\"UTF-8\">\n" \
     "   <meta name=\"viewport\"\n" \
     "       content=\"width=device-width, initial-scale=1,\n" \
     "           maximum-scale=1\">\n" \
-        PROJECT_TITLE "\n"
+        PROJECT_TAG "\n"
 #define STYLE_A "<link href=\"/style.css\" rel=\"stylesheet\">"
 #define LOGIN_BODY \
     "<header>\n" \
@@ -590,15 +591,74 @@ end:
     return ret;
 }
 
+static int common_head(struct html_node *const head, const char *const tl)
+{
+    int ret = -1;
+    struct html_node *charset, *title, *viewport;
+    struct dynstr t;
+
+    dynstr_init(&t);
+
+    if (!(title = html_node_add_child(head, "title")))
+    {
+        fprintf(stderr, "%s: html_node_add_child title failed\n", __func__);
+        goto end;
+    }
+    else if (!(charset = html_node_add_child(head, "meta")))
+    {
+        fprintf(stderr, "%s: html_node_add_child charset failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(charset, "charset", "UTF-8"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr charset failed\n", __func__);
+        goto end;
+    }
+    else if (tl && dynstr_append(&t, PROJECT_NAME " - %s", tl))
+    {
+        fprintf(stderr, "%s: dynstr_append title failed\n", __func__);
+        goto end;
+    }
+
+    const char *const value = tl ? t.str : PROJECT_TITLE;
+
+    if (html_node_set_value(title, value))
+    {
+        fprintf(stderr, "%s: html_node_set_value title failed\n", __func__);
+        goto end;
+    }
+    else if (!(viewport = html_node_add_child(head, "meta")))
+    {
+        fprintf(stderr, "%s: html_node_add_child viewport failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(viewport, "name", "viewport"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr name viewport failed\n",
+            __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(viewport, "content",
+        "width=device-width, initial-scale=1, maximum-scale=1"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr name viewport failed\n",
+            __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&t);
+    return ret;
+}
+
 static struct html_node *resource_layout(const char *const dir,
     const struct page_quota *const q, struct html_node **const table)
 {
     const char *const fdir = dir + strlen("/user");
     struct html_node *const html = html_node_alloc("html"),
-        *ret = NULL, *head, *title, *body, *charset, *viewport;
-    struct dynstr t;
-
-    dynstr_init(&t);
+        *ret = NULL, *head, *body;
 
     if (!html)
     {
@@ -620,47 +680,9 @@ static struct html_node *resource_layout(const char *const dir,
         fprintf(stderr, "%s: html_node_add_child table failed\n", __func__);
         goto end;
     }
-    else if (!(title = html_node_add_child(head, "title")))
+    else if (common_head(head, fdir))
     {
-        fprintf(stderr, "%s: html_node_add_child title failed\n", __func__);
-        goto end;
-    }
-    else if (!(charset = html_node_add_child(head, "meta")))
-    {
-        fprintf(stderr, "%s: html_node_add_child charset failed\n", __func__);
-        goto end;
-    }
-    else if (html_node_add_attr(charset, "charset", "UTF-8"))
-    {
-        fprintf(stderr, "%s: html_node_add_attr charset failed\n", __func__);
-        goto end;
-    }
-    else if (dynstr_append(&t, PROJECT_NAME " - %s", fdir))
-    {
-        fprintf(stderr, "%s: dynstr_append title failed\n", __func__);
-        goto end;
-    }
-    else if (html_node_set_value(title, t.str))
-    {
-        fprintf(stderr, "%s: html_node_set_value title failed\n", __func__);
-        goto end;
-    }
-    else if (!(viewport = html_node_add_child(head, "meta")))
-    {
-        fprintf(stderr, "%s: html_node_add_child viewport failed\n", __func__);
-        goto end;
-    }
-    else if (html_node_add_attr(viewport, "name", "viewport"))
-    {
-        fprintf(stderr, "%s: html_node_add_attr name viewport failed\n",
-            __func__);
-        goto end;
-    }
-    else if (html_node_add_attr(viewport, "content",
-        "width=device-width, initial-scale=1, maximum-scale=1"))
-    {
-        fprintf(stderr, "%s: html_node_add_attr name viewport failed\n",
-            __func__);
+        fprintf(stderr, "%s: common_head failed\n", __func__);
         goto end;
     }
     else if (prepare_upload_form(body, fdir))
@@ -692,7 +714,6 @@ static struct html_node *resource_layout(const char *const dir,
     ret = html;
 
 end:
-    dynstr_free(&t);
 
     if (!ret)
         html_node_free(html);
@@ -914,7 +935,7 @@ int page_forbidden(struct http_response *const r)
         DOCTYPE_TAG
         "<html>\n"
         "   <head>\n"
-        "       " PROJECT_TITLE "\n"
+        "       " PROJECT_TAG "\n"
         "       " COMMON_HEAD "\n"
         "   </head>\n"
             "Forbidden\n"
@@ -942,7 +963,7 @@ int page_bad_request(struct http_response *const r)
         DOCTYPE_TAG
         "<html>\n"
         "   <head>"
-        "   " PROJECT_TITLE "\n"
+        "   " PROJECT_TAG "\n"
         "   </head>"
             "Invalid request\n"
         "</html>";

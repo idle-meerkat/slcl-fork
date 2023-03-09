@@ -5,6 +5,7 @@ add_executable(${PROJECT_NAME}
     base64.c
     cftw.c
     handler.c
+    hex.c
     html.c
     http.c
     jwt.c

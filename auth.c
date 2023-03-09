@@ -1,4 +1,5 @@
 #include "auth.h"
+#include "hex.h"
 #include "http.h"
 #include "jwt.h"
 #include <cjson/cJSON.h>
@@ -70,22 +71,6 @@ end:
     return ret;
 }
 
-static int decode_hex(const char *const hex, unsigned char *buf, size_t n)
-{
-    for (const char *s = hex; *s; s += 2)
-    {
-        const char nibble[sizeof "00"] = {*s, *(s + 1)};
-
-        if (!n)
-            return -1;
-
-        *buf++ = strtoul(nibble, NULL, 16);
-        n--;
-    }
-
-    return n ? -1 : 0;
-}
-
 static int find_cookie(const cJSON *const users, const char *const cookie)
 {
     const cJSON *u;
@@ -107,9 +92,9 @@ static int find_cookie(const cJSON *const users, const char *const cookie)
             fprintf(stderr, "%s: missing key\n", __func__);
             return -1;
         }
-        else if (decode_hex(key, dkey, sizeof dkey))
+        else if (hex_decode(key, dkey, sizeof dkey))
         {
-            fprintf(stderr, "%s: decode_hex failed\n", __func__);
+            fprintf(stderr, "%s: hex_decode failed\n", __func__);
             return -1;
         }
 
@@ -177,9 +162,9 @@ static int generate_cookie(const cJSON *const json, const char *const path,
     int ret = -1;
     char *jwt = NULL;
 
-    if (decode_hex(key, dkey, sizeof dkey))
+    if (hex_decode(key, dkey, sizeof dkey))
     {
-        fprintf(stderr, "%s: decode_hex failed\n", __func__);
+        fprintf(stderr, "%s: hex_decode failed\n", __func__);
         goto end;
     }
     else if (!(jwt = jwt_encode(name, dkey, sizeof dkey)))
@@ -220,9 +205,9 @@ static int compare_pwd(const char *const salt, const char *const password,
         fprintf(stderr, "%s: malloc(3): %s\n", __func__, strerror(errno));
         goto end;
     }
-    else if (decode_hex(salt, dec_salt, sizeof dec_salt))
+    else if (hex_decode(salt, dec_salt, sizeof dec_salt))
     {
-        fprintf(stderr, "%s: decode_hex failed\n", __func__);
+        fprintf(stderr, "%s: hex_decode failed\n", __func__);
         goto end;
     }
 

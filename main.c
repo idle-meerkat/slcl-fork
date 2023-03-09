@@ -1,8 +1,11 @@
 #include "auth.h"
 #include "cftw.h"
 #include "handler.h"
+#include "hex.h"
 #include "http.h"
 #include "page.h"
+#include <openssl/err.h>
+#include <openssl/rand.h>
 #include <dynstr.h>
 #include <libgen.h>
 #include <fcntl.h>
@@ -352,6 +355,116 @@ end:
     return ret;
 }
 
+static bool path_isrel(const char *const path)
+{
+    if (!strcmp(path, "..") || !strcmp(path, ".") || strstr(path, "/../"))
+        return true;
+
+    static const char suffix[] = "/..";
+    const size_t n = strlen(path), sn = strlen(suffix);
+
+    if (n >= sn && !strcmp(path + n - sn, suffix))
+        return true;
+
+    return false;
+}
+
+static int getpublic(const struct http_payload *const p,
+    struct http_response *const r, void *const user)
+{
+    int ret = -1;
+    struct auth *const a = user;
+    const char *const adir = auth_dir(a);
+    struct dynstr d;
+
+    dynstr_init(&d);
+
+    if (!adir)
+    {
+        fprintf(stderr, "%s: auth_dir failed\n", __func__);
+        goto end;
+    }
+    else if (path_isrel(p->resource))
+    {
+        fprintf(stderr, "%s: illegal relative path %s\n",
+            __func__, p->resource);
+        ret = page_forbidden(r);
+        goto end;
+    }
+    else if (dynstr_append(&d, "%s%s", adir, p->resource))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        goto end;
+    }
+    else if (page_public(r, d.str))
+    {
+        fprintf(stderr, "%s: page_public failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&d);
+    return ret;
+}
+
+static char *create_symlink(const char *const username, const char *const dir,
+    const char *const path)
+{
+    char *ret = NULL;
+    unsigned char buf[16];
+    char dbuf[1 + 2 * sizeof buf];
+    struct dynstr user, abs, rel;
+
+    dynstr_init(&user);
+    dynstr_init(&abs);
+    dynstr_init(&rel);
+
+    if (RAND_bytes(buf, sizeof buf) != 1)
+    {
+        fprintf(stderr, "%s: RAND_bytes failed with %lu\n",
+            __func__, ERR_get_error());
+        goto end;
+    }
+    else if (hex_encode(buf, dbuf, sizeof buf, sizeof dbuf))
+    {
+        fprintf(stderr, "%s: hex_encode failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&user, "%s/user/%s%s", dir, username, path))
+    {
+        fprintf(stderr, "%s: dynstr_append user failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&rel, "/public/%s", dbuf))
+    {
+        fprintf(stderr, "%s: dynstr_append rel failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&abs, "%s%s", dir, rel.str))
+    {
+        fprintf(stderr, "%s: dynstr_append abs failed\n", __func__);
+        goto end;
+    }
+    else if (symlink(user.str, abs.str))
+    {
+        fprintf(stderr, "%s: symlink(2): %s\n", __func__, strerror(errno));
+        goto end;
+    }
+
+    ret = rel.str;
+
+end:
+    dynstr_free(&user);
+    dynstr_free(&abs);
+
+    if (!ret)
+        dynstr_free(&rel);
+
+    return ret;
+}
+
 static int search(const struct http_payload *const p,
     struct http_response *const r, void *const user)
 {
@@ -367,6 +480,73 @@ static int search(const struct http_payload *const p,
     return -1;
 }
 
+static int share(const struct http_payload *const p,
+    struct http_response *const r, void *const user)
+{
+    struct auth *const a = user;
+
+    if (auth_cookie(a, &p->cookie))
+    {
+        fprintf(stderr, "%s: auth_cookie failed\n", __func__);
+        return page_forbidden(r);
+    }
+
+    const char *const adir = auth_dir(a);
+
+    if (!adir)
+    {
+        fprintf(stderr, "%s: auth_dir failed\n", __func__);
+        return -1;
+    }
+
+    int ret = -1;
+    struct form *forms = NULL;
+    size_t n;
+    char *sympath = NULL;
+
+    if (!(forms = get_forms(p, &n)))
+    {
+        fprintf(stderr, "%s: get_forms failed\n", __func__);
+        ret = page_bad_request(r);
+        goto end;
+    }
+    else if (n != 1)
+    {
+        fprintf(stderr, "%s: expected 1 form, got %zu\n", __func__, n);
+        ret = page_bad_request(r);
+        goto end;
+    }
+
+    const char *const path = forms->value, *const username = p->cookie.field;
+
+    if (path_isrel(path))
+    {
+        fprintf(stderr, "%s: invalid path %s\n", __func__, path);
+        ret = page_bad_request(r);
+        goto end;
+    }
+    else if (!(sympath = create_symlink(username, adir, path)))
+    {
+        fprintf(stderr, "%s: create_symlink failed\n", __func__);
+        goto end;
+    }
+    else if (page_share(r, sympath))
+    {
+        fprintf(stderr, "%s: page_share failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    if (forms)
+        for (size_t i = 0; i < n; i++)
+            form_free(&forms[i]);
+
+    free(forms);
+    free(sympath);
+    return ret;
+}
 
 static int add_length(const char *const fpath, const struct stat *const sb,
     void *const user)
@@ -443,20 +623,6 @@ static int check_length(const unsigned long long len,
         return check_quota(a, username, len, quota);
 
     return 0;
-}
-
-static bool path_isrel(const char *const path)
-{
-    if (!strcmp(path, "..") || !strcmp(path, ".") || strstr(path, "/../"))
-        return true;
-
-    static const char suffix[] = "/..";
-    const size_t n = strlen(path), sn = strlen(suffix);
-
-    if (n >= sn && !strcmp(path + n - sn, suffix))
-        return true;
-
-    return false;
 }
 
 static int getnode(const struct http_payload *const p,
@@ -976,7 +1142,9 @@ int main(const int argc, char *const argv[])
         || handler_add(h, "/user/*", HTTP_OP_GET, getnode, a)
         || handler_add(h, "/login", HTTP_OP_POST, login, a)
         || handler_add(h, "/logout", HTTP_OP_POST, logout, a)
+        || handler_add(h, "/public/*", HTTP_OP_GET, getpublic, a)
         || handler_add(h, "/search", HTTP_OP_POST, search, a)
+        || handler_add(h, "/share", HTTP_OP_POST, share, a)
         || handler_add(h, "/upload", HTTP_OP_POST, upload, a)
         || handler_add(h, "/mkdir", HTTP_OP_POST, createdir, a)
         || handler_listen(h, port))

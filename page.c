@@ -161,11 +161,89 @@ static int prepare_date(struct html_node *const n, const struct stat *const sb)
     return 0;
 }
 
+static int prepare_share(struct html_node *const n,
+    const struct stat *const sb, const char *const dir, const char *const name)
+{
+    int ret = -1;
+    const char *const fdir = dir + strlen("/user");
+    struct html_node *form, *file, *submit;
+    struct dynstr d;
+
+    dynstr_init(&d);
+
+    if (!S_ISREG(sb->st_mode))
+        return 0;
+
+    if (!(form = html_node_add_child(n, "form")))
+    {
+        fprintf(stderr, "%s: html_node_add_child form failed\n", __func__);
+        goto end;
+    }
+    else if (!(file = html_node_add_child(form, "input")))
+    {
+        fprintf(stderr, "%s: html_node_add_child file failed\n", __func__);
+        goto end;
+    }
+    else if (!(submit = html_node_add_child(form, "input")))
+    {
+        fprintf(stderr, "%s: html_node_add_child file failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(form, "method", "post"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr method failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(form, "action", "/share"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr action failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(file, "type", "hidden"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr file type failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(file, "name", "name"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr file name failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "%s%s", fdir, name))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(file, "value", d.str))
+    {
+        fprintf(stderr, "%s: html_node_add_attr file value failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(submit, "type", "submit"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr submit type failed\n",
+            __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(submit, "value", "Share"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr submit value failed\n",
+            __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&d);
+    return ret;
+}
+
 static int add_element(struct html_node *const n, const char *const dir,
     const char *const res, const char *const name)
 {
     int ret = -1;
-    enum {NAME, SIZE, DATE, COLUMNS};
+    enum {NAME, SIZE, DATE, SHARE, COLUMNS};
     struct html_node *tr, *td[COLUMNS];
     struct dynstr path;
     const char *const sep = res[strlen(res) - 1] != '/' ? "/" : "";
@@ -210,6 +288,11 @@ static int add_element(struct html_node *const n, const char *const dir,
         goto end;
     }
     else if (prepare_date(td[DATE], &sb))
+    {
+        fprintf(stderr, "%s: prepare_date failed\n", __func__);
+        goto end;
+    }
+    else if (prepare_share(td[SHARE], &sb, dir, name))
     {
         fprintf(stderr, "%s: prepare_date failed\n", __func__);
         goto end;
@@ -892,6 +975,32 @@ int page_resource(struct http_response *const r, const char *const dir,
     return -1;
 }
 
+int page_public(struct http_response *const r, const char *const res)
+{
+    struct stat sb;
+
+    if (stat(res, &sb))
+    {
+        fprintf(stderr, "%s: stat(2) %s: %s\n",
+            __func__, res, strerror(errno));
+
+        if (errno == ENOENT)
+            return page_not_found(r);
+        else
+            return -1;
+    }
+
+    const mode_t m = sb.st_mode;
+
+    if (!S_ISREG(m))
+    {
+        fprintf(stderr, "%s: only regular files are supported\n", __func__);
+        return -1;
+    }
+
+    return serve_file(r, &sb, res);
+}
+
 int page_failed_login(struct http_response *const r)
 {
     static const char index[] =
@@ -1035,4 +1144,79 @@ int page_style(struct http_response *const r)
     }
 
     return 0;
+}
+
+int page_share(struct http_response *const r, const char *const path)
+{
+    int ret = -1;
+    struct dynstr out;
+    struct html_node *const html = html_node_alloc("html"),
+        *head, *a;
+
+    dynstr_init(&out);
+
+    if (!html)
+    {
+        fprintf(stderr, "%s: html_node_alloc failed\n", __func__);
+        goto end;
+    }
+    else if (!(head = html_node_add_child(html, "head")))
+    {
+        fprintf(stderr, "%s: html_node_add_child head failed\n", __func__);
+        goto end;
+    }
+    else if (common_head(head, NULL))
+    {
+        fprintf(stderr, "%s: common_head failed\n", __func__);
+        goto end;
+    }
+    else if (!(a = html_node_add_child(html, "a")))
+    {
+        fprintf(stderr, "%s: html_node_add_child failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(a, "href", path))
+    {
+        fprintf(stderr, "%s: html_node_add_attr href failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_set_value(a, "Copy this link"))
+    {
+        fprintf(stderr, "%s: html_node_set_value href failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&out, DOCTYPE_TAG))
+    {
+        fprintf(stderr, "%s: dynstr_prepend failed\n", __func__);
+        goto end;
+    }
+    else if (html_serialize(html, &out))
+    {
+        fprintf(stderr, "%s: html_serialize failed\n", __func__);
+        goto end;
+    }
+
+    *r = (const struct http_response)
+    {
+        .status = HTTP_STATUS_OK,
+        .buf.rw = out.str,
+        .n = out.len,
+        .free = free
+    };
+
+    if (http_response_add_header(r, "Content-Type", "text/html"))
+    {
+        fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    html_node_free(html);
+
+    if (ret)
+        dynstr_free(&out);
+
+    return ret;
 }

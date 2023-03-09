@@ -145,6 +145,14 @@ static struct form *append_form(struct form *forms, const char **const s,
         goto end;
     }
 
+    /* HTML input forms use '+' for whitespace, rather than %20. */
+    {
+        char *c = f->value;
+
+        while ((c = strchr(c, '+')))
+            *c = ' ';
+    }
+
     *s = end;
     ret = forms;
 
@@ -816,17 +824,6 @@ static int createdir(const struct http_payload *const p,
         fprintf(stderr, "%s: invalid name %s\n", __func__, name);
         ret = page_bad_request(r);
         goto end;
-    }
-
-    /* HTML input forms use '+' for whitespace, rather than %20. */
-    {
-        char *c = name, *d = dir;
-
-        while ((c = strchr(c, '+')))
-            *c = ' ';
-
-        while ((d = strchr(d, '+')))
-            *d = ' ';
     }
 
     const char *const root = auth_dir(a);

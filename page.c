@@ -837,6 +837,33 @@ static int serve_file(struct http_response *const r,
     return 0;
 }
 
+static int page_not_found(struct http_response *const r)
+{
+    static const char body[] =
+        DOCTYPE_TAG
+        "<html>\n"
+        "   <head>"
+        "   " PROJECT_TAG "\n"
+        "   </head>"
+            "File or directory not found\n"
+        "</html>";
+
+    *r = (const struct http_response)
+    {
+        .status = HTTP_STATUS_NOT_FOUND,
+        .buf.ro = body,
+        .n = sizeof body - 1
+    };
+
+    if (http_response_add_header(r, "Content-Type", "text/html"))
+    {
+        fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
+        return -1;
+    }
+
+    return 0;
+}
+
 int page_resource(struct http_response *const r, const char *const dir,
     const char *const root, const char *const res,
     const struct page_quota *const q)
@@ -849,14 +876,7 @@ int page_resource(struct http_response *const r, const char *const dir,
             __func__, res, strerror(errno));
 
         if (errno == ENOENT)
-        {
-            *r = (const struct http_response)
-            {
-                .status = HTTP_STATUS_NOT_FOUND
-            };
-
-            return 0;
-        }
+            return page_not_found(r);
         else
             return -1;
     }

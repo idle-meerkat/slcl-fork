@@ -283,10 +283,7 @@ static int login(const struct http_payload *const pl,
 end:
     if (forms)
         for (size_t i = 0; i < n; i++)
-        {
-            free(forms[i].key);
-            free(forms[i].value);
-        }
+            form_free(&forms[i]);
 
     free(cookie);
     free(forms);

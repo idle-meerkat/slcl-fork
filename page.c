@@ -341,7 +341,7 @@ static int prepare_upload_form(struct html_node *const n, const char *const dir)
     }
     else if (html_node_add_attr(form, "action", "/upload"))
     {
-        fprintf(stderr, "%s: html_node_add_attr method failed\n", __func__);
+        fprintf(stderr, "%s: html_node_add_attr action failed\n", __func__);
         return -1;
     }
     else if (html_node_add_attr(form, "enctype", "multipart/form-data"))

@@ -1,0 +1,92 @@
+.TH USERGEN 1 usergen
+
+.SH NAME
+usergen \- append a user into a slcl database
+
+.SH SYNOPSIS
+.B usergen
+dir
+
+.SH DESCRIPTION
+.B usergen
+performs the following steps:
+
+.B 1.
+Reads user credentials and quota from standard input.
+
+.B 2.
+Generates a JSON object with the read credentials and quota, as well as
+a random salt and signing key.
+
+.B 3.
+Appends the newly generated JSON object into the
+.B users
+key in
+.BR dir/db.json .
+
+.B 4.
+Creates a directory with the username in
+.BR dir/user/ .
+
+.SH OPTIONS
+.B dir
+defines the directory where
+.B db.json
+is located.
+
+.SH NOTES
+For security reasons, passwords are never stored in plaintext into
+.BR dir/db.json .
+Instead, a salted, multi-round hashed password is calculated and
+stored. Then,
+.B slcl(1)
+performs the same operations to ensure both tokens match.
+
+.SH EXAMPLES
+
+Below, there is an example of a new user called
+.B johndoe
+with password
+.B secret
+and a specified quota of 512 MiB:
+
+.PP
+.EX
+$ ./usergen ~/db
+Username:
+johndoe
+Password:
+secret
+Quota, in MiB (leave empty for unlimited quota):
+512
+1000/1000
+.EE
+
+Then,
+.B dir/db.json
+should be updated to something similar to:
+
+.PP
+.EX
+{
+  "users": [
+    {
+      "name": "johndoe",
+      "password": "4c48385ec2be4798dc772d3c8f5649d8411afbdfc4708ada79379e3562af5abb",
+      "salt": "835324df29527731f3faad663c58c3b19a07c193e97dc77f33e10d3942cdc91c",
+      "key": "d0ae360b9af1177ce73eef3f499eea2627cd61b69df79dcb7a5c70bc658a4e63",
+      "quota": "512"
+    }
+  ]
+}
+.EE
+
+.SH LICENSE
+See the LICENSE file for further reference.
+
+.SH AUTHORS
+Written by Xavier Del Campo Romero.
+
+.SH SEE ALSO
+
+.B slcl(1)

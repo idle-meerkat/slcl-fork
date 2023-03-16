@@ -43,6 +43,7 @@ to `slcl`. If required, encryption should be done before uploading e.g.: using
 - [`dynstr`](https://gitea.privatedns.org/xavi92/dynstr)
 (provided as a `git` submodule).
 - `xxd` (for [`usergen`](usergen) only).
+- `jq` (for [`usergen`](usergen) only).
 - CMake (optional).
 
 ### Ubuntu / Debian

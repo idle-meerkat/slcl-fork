@@ -682,11 +682,12 @@ static int getnode(const struct http_payload *const p,
         goto end;
     }
 
-    const struct page_quota pq =
-    {
-        .cur = cur,
-        .max = max
-    }, *const ppq = available ? &pq : NULL;
+    const struct page_quota *const ppq = available ?
+        &(const struct page_quota)
+        {
+            .cur = cur,
+            .max = max
+        } : NULL;
 
     ret = page_resource(r, dir.str, root.str, d.str, ppq);
 

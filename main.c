@@ -1113,6 +1113,77 @@ static int parse_args(const int argc, char *const argv[],
     return 0;
 }
 
+static int ensure_dir(const char *const dir)
+{
+    struct stat sb;
+
+    if (stat(dir, &sb))
+    {
+        switch (errno)
+        {
+            case ENOENT:
+                if (mkdir(dir, S_IRWXU))
+                {
+                    fprintf(stderr, "%s: mkdir(2) %s: %s\n",
+                        __func__, dir, strerror(errno));
+                    return -1;
+                }
+
+                printf("Created empty directory at %s\n", dir);
+                break;
+
+            default:
+                fprintf(stderr, "%s: stat(2): %s\n", __func__, strerror(errno));
+                return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int init_dirs(const char *const dir)
+{
+    int ret = -1;
+    struct dynstr user, public;
+    struct sb;
+
+    dynstr_init(&user);
+    dynstr_init(&public);
+
+    if (dynstr_append(&user, "%s/user", dir))
+    {
+        fprintf(stderr, "%s: dynstr_append user failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&public, "%s/public", dir))
+    {
+        fprintf(stderr, "%s: dynstr_append public failed\n", __func__);
+        goto end;
+    }
+    else if (ensure_dir(dir))
+    {
+        fprintf(stderr, "%s: ensure_dir dir failed\n", __func__);
+        goto end;
+    }
+    else if (ensure_dir(user.str))
+    {
+        fprintf(stderr, "%s: ensure_dir user failed\n", __func__);
+        goto end;
+    }
+    else if (ensure_dir(public.str))
+    {
+        fprintf(stderr, "%s: ensure_dir public failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&user);
+    dynstr_free(&public);
+    return ret;
+}
+
 int main(const int argc, char *const argv[])
 {
     int ret = EXIT_FAILURE;
@@ -1122,6 +1193,7 @@ int main(const int argc, char *const argv[])
     unsigned short port;
 
     if (parse_args(argc, argv, &dir, &port, &tmpdir)
+        || init_dirs(dir)
         || !(a = auth_alloc(dir)))
         goto end;
 

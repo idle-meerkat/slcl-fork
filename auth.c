@@ -476,7 +476,8 @@ static int create_db(const char *const path)
         a.p = ((const char *)a.p) + n;
     }
 
-    printf("Created login database at %s\n", path);
+    printf("Created login database at %s. Please remember to add new users "
+        "with usergen(1).\n", path);
     ret = 0;
 
 end:

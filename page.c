@@ -3,6 +3,8 @@
 #include "html.h"
 #include <dynstr.h>
 #include <dirent.h>
+#include <fcntl.h>
+#include <libgen.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -902,12 +904,33 @@ end:
 static int serve_file(struct http_response *const r,
     const struct stat *const sb, const char *const res)
 {
+    int ret = -1;
     FILE *const f = fopen(res, "rb");
+    struct dynstr b, d;
+    char *bn;
+
+    dynstr_init(&b);
+    dynstr_init(&d);
 
     if (!f)
     {
         fprintf(stderr, "%s: fopen(3): %s\n", __func__, strerror(errno));
-        return -1;
+        goto end;
+    }
+    else if (dynstr_append(&b, "%s", res))
+    {
+        fprintf(stderr, "%s: dynstr_append res failed\n", __func__);
+        goto end;
+    }
+    else if (!(bn = basename(b.str)))
+    {
+        fprintf(stderr, "%s: basename(3) failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "attachment; filename=\"%s\"", bn))
+    {
+        fprintf(stderr, "%s: dynstr_append attachment failed\n", __func__);
+        goto end;
     }
 
     *r = (const struct http_response)
@@ -917,7 +940,22 @@ static int serve_file(struct http_response *const r,
         .n = sb->st_size
     };
 
-    return 0;
+    if (http_response_add_header(r, "Content-Disposition", d.str))
+    {
+        fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&b);
+    dynstr_free(&d);
+
+    if (ret && f && fclose(f))
+        fprintf(stderr, "%s: fclose(3): %s\n", __func__, strerror(errno));
+
+    return ret;
 }
 
 static int page_not_found(struct http_response *const r)
@@ -975,9 +1013,48 @@ int page_resource(struct http_response *const r, const char *const dir,
     return -1;
 }
 
+static char *resolve_link(const char *const res)
+{
+    size_t len = 1;
+    char *p = NULL;
+
+    for (;;)
+    {
+        char *const pp = realloc(p, len);
+
+        if (!pp)
+        {
+            fprintf(stderr, "%s: realloc(3): %s\n", __func__, strerror(errno));
+            break;
+        }
+
+        p = pp;
+
+        const ssize_t n = readlink(res, p, len);
+
+        if (n < 0)
+        {
+            fprintf(stderr, "%s: readlink(2): %s\n", __func__, strerror(errno));
+            break;
+        }
+        else if (n < len)
+        {
+            p[len - 1] = '\0';
+            return p;
+        }
+
+        len++;
+    }
+
+    free(p);
+    return NULL;
+}
+
 int page_public(struct http_response *const r, const char *const res)
 {
+    int ret = -1;
     struct stat sb;
+    char *path = NULL;
 
     if (stat(res, &sb))
     {
@@ -987,7 +1064,7 @@ int page_public(struct http_response *const r, const char *const res)
         if (errno == ENOENT)
             return page_not_found(r);
         else
-            return -1;
+            goto end;
     }
 
     const mode_t m = sb.st_mode;
@@ -995,10 +1072,24 @@ int page_public(struct http_response *const r, const char *const res)
     if (!S_ISREG(m))
     {
         fprintf(stderr, "%s: only regular files are supported\n", __func__);
-        return -1;
+        goto end;
+    }
+    else if (!(path = resolve_link(res)))
+    {
+        fprintf(stderr, "%s: resolve_link failed\n", __func__);
+        goto end;
+    }
+    else if (serve_file(r, &sb, path))
+    {
+        fprintf(stderr, "%s: serve_file failed\n", __func__);
+        goto end;
     }
 
-    return serve_file(r, &sb, res);
+    ret = 0;
+
+end:
+    free(path);
+    return ret;
 }
 
 int page_failed_login(struct http_response *const r)

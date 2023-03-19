@@ -89,22 +89,26 @@ static void form_free(struct form *const f)
     }
 }
 
-static struct form *append_form(struct form *forms, const char **const s,
+static void forms_free(struct form *const f, const size_t n)
+{
+    if (f)
+        for (size_t i = 0; i < n; i++)
+            form_free(&f[i]);
+
+    free(f);
+}
+
+static int append_form(struct form **const forms, const char **const s,
     size_t *const n)
 {
-    struct form *ret = NULL;
+    int ret = -1;
     const char *end;
     char *const data = alloc_form_data(*s, &end), *key = NULL, *value = NULL;
-    struct form *f = NULL;
+    struct form *f = NULL, *fs = NULL;
 
     if (!data)
     {
         fprintf(stderr, "%s: alloc_form_data failed\n", __func__);
-        goto end;
-    }
-    else if (!(forms = realloc(forms, (*n + 1) * sizeof *forms)))
-    {
-        fprintf(stderr, "%s: realloc(3): %s\n", __func__, strerror(errno));
         goto end;
     }
 
@@ -113,15 +117,15 @@ static struct form *append_form(struct form *forms, const char **const s,
     if (!sep)
     {
         fprintf(stderr, "%s: strchr(3) returned NULL\n", __func__);
+        ret = 1;
         goto end;
     }
     else if (!data || !*(sep + 1))
     {
         fprintf(stderr, "%s: expected key=value (%s)\n", __func__, data);
+        ret = 1;
         goto end;
     }
-
-    f = &forms[(*n)++];
 
     const size_t keylen = sep - data;
 
@@ -135,6 +139,14 @@ static struct form *append_form(struct form *forms, const char **const s,
         fprintf(stderr, "%s: strdup(3) value: %s\n", __func__, strerror(errno));
         goto end;
     }
+    else if (!(fs = realloc(*forms, (*n + 1) * sizeof **forms)))
+    {
+        fprintf(stderr, "%s: realloc(3): %s\n", __func__, strerror(errno));
+        goto end;
+    }
+
+    *forms = fs;
+    f = &(*forms)[(*n)++];
 
     *f = (const struct form)
     {
@@ -157,36 +169,33 @@ static struct form *append_form(struct form *forms, const char **const s,
     }
 
     *s = end;
-    ret = forms;
+    ret = 0;
 
 end:
     free(key);
     free(value);
     free(data);
-
-    if (!ret)
-        form_free(f);
-
     return ret;
 }
 
-static struct form *get_forms(const struct http_payload *const pl,
-    size_t *const outn)
+static int get_forms(const struct http_payload *const pl,
+    struct form **const forms, size_t *const outn)
 {
+    int ret = -1;
     const struct http_post *const p = &pl->u.post;
     const char *const ref = p->data;
     char *dup = NULL;
-    struct form *forms = NULL;
+    struct form *f = NULL;
 
     if (!ref)
     {
         fprintf(stderr, "%s: expected non-NULL buffer\n", __func__);
-        goto failure;
+        goto end;
     }
     else if (!(dup = strndup(ref, p->n)))
     {
         fprintf(stderr, "%s: strndup(3): %s\n", __func__, strerror(errno));
-        goto failure;
+        goto end;
     }
 
     const char *s = dup;
@@ -194,25 +203,24 @@ static struct form *get_forms(const struct http_payload *const pl,
     *outn = 0;
 
     while (*s)
-    {
-        struct form *const f = append_form(forms, &s, outn);
-
-        if (!f)
+        if ((ret = append_form(&f, &s, outn)))
         {
-            fprintf(stderr, "%s: append_form failed\n", __func__);
-            goto failure;
+            if (ret < 0)
+                fprintf(stderr, "%s: append_form failed\n", __func__);
+
+            goto end;
         }
 
-        forms = f;
-    }
+    *forms = f;
+    ret = 0;
 
+end:
     free(dup);
-    return forms;
 
-failure:
-    free(dup);
-    free(forms);
-    return NULL;
+    if (ret)
+        forms_free(f, *outn);
+
+    return ret;
 }
 
 static int check_credentials(struct auth *const a,
@@ -249,52 +257,51 @@ static int check_credentials(struct auth *const a,
 static int login(const struct http_payload *const pl,
     struct http_response *const r, void *const user)
 {
-    int res = -1;
-    size_t n;
-    struct form *const forms = get_forms(pl, &n);
+    int ret = -1;
+    size_t n = 0;
+    struct form *forms = NULL;
     struct auth *const a = user;
     char *cookie = NULL;
 
-    if (!forms)
+    if ((ret = get_forms(pl, &forms, &n)))
     {
-        fprintf(stderr, "%s: get_forms failed\n", __func__);
+        if (ret < 0)
+            fprintf(stderr, "%s: get_forms failed\n", __func__);
+
         goto end;
     }
-    else if ((res = check_credentials(a, forms, n, &cookie)))
+    else if ((ret = check_credentials(a, forms, n, &cookie)))
     {
-        if (res < 0)
+        if (ret < 0)
             fprintf(stderr, "%s: check_credentials failed\n", __func__);
 
         goto end;
     }
-    else if (redirect(r))
+    else if ((ret = redirect(r)))
     {
         fprintf(stderr, "%s: redirect failed\n", __func__);
         goto end;
     }
-    else if (cookie && http_response_add_header(r, "Set-Cookie", cookie))
+    else if (cookie
+        && (ret = http_response_add_header(r, "Set-Cookie", cookie)))
     {
         fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
         goto end;
     }
 
-    res = 0;
+    ret = 0;
 
 end:
-    if (forms)
-        for (size_t i = 0; i < n; i++)
-            form_free(&forms[i]);
-
+    forms_free(forms, n);
     free(cookie);
-    free(forms);
 
-    if (res && page_failed_login(r))
+    if (ret > 0 && (ret = page_failed_login(r)))
     {
         fprintf(stderr, "%s: page_failed_login failed\n", __func__);
         return -1;
     }
 
-    return 0;
+    return ret;
 }
 
 static int logout(const struct http_payload *const p,
@@ -498,13 +505,16 @@ static int share(const struct http_payload *const p,
 
     int ret = -1;
     struct form *forms = NULL;
-    size_t n;
+    size_t n = 0;
     char *sympath = NULL;
 
-    if (!(forms = get_forms(p, &n)))
+    if ((ret = get_forms(p, &forms, &n)))
     {
-        fprintf(stderr, "%s: get_forms failed\n", __func__);
-        ret = page_bad_request(r);
+        if (ret < 0)
+            fprintf(stderr, "%s: get_forms failed\n", __func__);
+        else
+            ret = page_bad_request(r);
+
         goto end;
     }
     else if (n != 1)
@@ -536,11 +546,7 @@ static int share(const struct http_payload *const p,
     ret = 0;
 
 end:
-    if (forms)
-        for (size_t i = 0; i < n; i++)
-            form_free(&forms[i]);
-
-    free(forms);
+    forms_free(forms, n);
     free(sympath);
     return ret;
 }
@@ -927,6 +933,7 @@ static int createdir(const struct http_payload *const p,
     struct auth *const a = user;
     struct dynstr d, userd;
     struct form *forms = NULL;
+    size_t n = 0;
 
     dynstr_init(&d);
     dynstr_init(&userd);
@@ -937,13 +944,13 @@ static int createdir(const struct http_payload *const p,
         ret = page_forbidden(r);
         goto end;
     }
-
-    size_t n;
-
-    if (!(forms = get_forms(p, &n)))
+    else if ((ret = get_forms(p, &forms, &n)))
     {
-        fprintf(stderr, "%s: get_forms failed\n", __func__);
-        ret = page_bad_request(r);
+        if (ret < 0)
+            fprintf(stderr, "%s: get_forms failed\n", __func__);
+        else
+            ret = page_bad_request(r);
+
         goto end;
     }
     else if (n != 2)
@@ -995,7 +1002,7 @@ static int createdir(const struct http_payload *const p,
     if (!root)
     {
         fprintf(stderr, "%s: auth_dir failed\n", __func__);
-        return -1;
+        goto end;
     }
     else if (dynstr_append(&d, "%s/user/%s/%s%s",
         root, p->cookie.field, dir, name))
@@ -1050,11 +1057,7 @@ static int createdir(const struct http_payload *const p,
     ret = 0;
 
 end:
-    if (forms)
-        for (size_t i = 0; i < n; i++)
-            form_free(&forms[i]);
-
-    free(forms);
+    forms_free(forms, n);
     dynstr_free(&userd);
     dynstr_free(&d);
     return ret;

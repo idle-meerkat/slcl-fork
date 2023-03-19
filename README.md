@@ -66,8 +66,8 @@ sudo apt install cmake xxd jq
 Two build environments are provided for `slcl` - feel free to choose any of
 them:
 
-- A mostly POSIX-compliant [`Makefile`](/Makefile).
-- A [`CMakeLists.txt`](/CMakeLists.txt).
+- A mostly POSIX-compliant [`Makefile`](Makefile).
+- A [`CMakeLists.txt`](CMakeLists.txt).
 
 `slcl` can be built using the standard build process:
 
@@ -147,7 +147,7 @@ schema:
 [`usergen`](usergen) is an interactive script that consumes a directory,
 a username, a password and, optionally, a user quota in MiB. A salt is
 randomly generated using `openssl` and passwords are hashed multiple times
-beforehand - see [`usergen`](usergen) and [`auth.c`](/auth.c) for further
+beforehand - see [`usergen`](usergen) and [`auth.c`](auth.c) for further
 reference. Also, a random key is generated that is later used to sign HTTP
 cookies.
 
@@ -217,4 +217,4 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ```
 
-Also, see [`LICENSE`](/LICENSE).
+Also, see [`LICENSE`](LICENSE).

@@ -17,5 +17,7 @@ int page_resource(struct http_response *r, const char *dir, const char *root,
     const char *res, const struct page_quota *q);
 int page_public(struct http_response *r, const char *res);
 int page_share(struct http_response *r, const char *path);
+int page_quota_exceeded(struct http_response *r, unsigned long long len,
+    unsigned long long quota);
 
 #endif /* PAGE_H */

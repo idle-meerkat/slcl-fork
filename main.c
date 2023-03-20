@@ -610,7 +610,8 @@ static int check_quota(const struct auth *const a, const char *const username,
 }
 
 static int check_length(const unsigned long long len,
-    const struct http_cookie *const c, void *const user)
+    const struct http_cookie *const c, struct http_response *const r,
+    void *const user)
 {
     struct auth *const a = user;
     const char *const username = c->field;
@@ -623,7 +624,16 @@ static int check_length(const unsigned long long len,
         return -1;
     }
     else if (has_quota)
-        return check_quota(a, username, len, quota);
+    {
+        int res = check_quota(a, username, len, quota);
+
+        if (res < 0)
+            fprintf(stderr, "%s: check_quota failed\n", __func__);
+        else if (res > 0 && page_quota_exceeded(r, len, quota) < 0)
+            return -1;
+
+        return res;
+    }
 
     return 0;
 }

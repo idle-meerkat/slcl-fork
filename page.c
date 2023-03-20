@@ -1311,3 +1311,93 @@ end:
 
     return ret;
 }
+
+int page_quota_exceeded(struct http_response *const r,
+    const unsigned long long len, const unsigned long long quota)
+{
+    int ret = -1;
+    struct dynstr msg, out;
+    char q[sizeof MAXSIZEFMT], l[sizeof q];
+    struct html_node *const html = html_node_alloc("html"),
+        *head, *body;
+
+    dynstr_init(&msg);
+    dynstr_init(&out);
+
+    if (!html)
+    {
+        fprintf(stderr, "%s: html_node_alloc failed\n", __func__);
+        goto end;
+    }
+    else if (!(head = html_node_add_child(html, "head")))
+    {
+        fprintf(stderr, "%s: html_node_add_child head failed\n", __func__);
+        goto end;
+    }
+    else if (!(body = html_node_add_child(html, "body")))
+    {
+        fprintf(stderr, "%s: html_node_add_child body failed\n", __func__);
+        goto end;
+    }
+    else if (common_head(head, NULL))
+    {
+        fprintf(stderr, "%s: common_head failed\n", __func__);
+        goto end;
+    }
+    else if (size_units(quota, q, sizeof q))
+    {
+        fprintf(stderr, "%s: size_units quota failed\n", __func__);
+        goto end;
+    }
+    else if (size_units(len, l, sizeof l))
+    {
+        fprintf(stderr, "%s: size_units len failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&msg, "Maximum quota exceeded: %s "
+        "(requested size: %s)", q, l))
+    {
+        fprintf(stderr, "%s: dynstr_append msg failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_set_value(body, msg.str))
+    {
+        fprintf(stderr, "%s: html_node_set_value msg failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&out, DOCTYPE_TAG))
+    {
+        fprintf(stderr, "%s: dynstr_prepend failed\n", __func__);
+        goto end;
+    }
+    else if (html_serialize(html, &out))
+    {
+        fprintf(stderr, "%s: html_serialize failed\n", __func__);
+        goto end;
+    }
+
+    *r = (const struct http_response)
+    {
+        .status = HTTP_STATUS_PAYLOAD_TOO_LARGE,
+        .buf.rw = out.str,
+        .n = out.len,
+        .free = free
+    };
+
+    if (http_response_add_header(r, "Content-Type", "text/html"))
+    {
+        fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    html_node_free(html);
+    dynstr_free(&msg);
+
+    if (ret)
+        dynstr_free(&out);
+
+    return ret;
+}

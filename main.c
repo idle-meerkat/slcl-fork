@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "auth.h"
 #include "cftw.h"
 #include "handler.h"

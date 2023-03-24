@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "page.h"
 #include "http.h"
 #include "html.h"

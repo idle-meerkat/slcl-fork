@@ -1153,6 +1153,11 @@ static int ensure_dir(const char *const dir)
                 return -1;
         }
     }
+    else if (!S_ISDIR(sb.st_mode))
+    {
+        fprintf(stderr, "%s: %s not a directory\n", __func__, dir);
+        return -1;
+    }
 
     return 0;
 }

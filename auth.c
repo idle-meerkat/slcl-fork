@@ -510,14 +510,51 @@ static int init_db(struct auth *const a)
     return 0;
 }
 
+static char *resolve_cwd(void)
+{
+    size_t len = 1;
+    char *p = NULL;
+
+    for (;;)
+    {
+        char *const pp = realloc(p, len);
+
+        if (!pp)
+        {
+            fprintf(stderr, "%s: realloc(3): %s\n", __func__, strerror(errno));
+            break;
+        }
+
+        p = pp;
+
+        if (!getcwd(pp, len))
+        {
+            if (errno != ERANGE)
+            {
+                fprintf(stderr, "%s: getcwd(3): %s\n",
+                    __func__, strerror(errno));
+                break;
+            }
+            else
+                len++;
+        }
+        else
+            return p;
+    }
+
+    free(p);
+    return NULL;
+}
+
 struct auth *auth_alloc(const char *const dir)
 {
-    struct auth *const a = malloc(sizeof *a);
+    struct auth *const a = malloc(sizeof *a), *ret = NULL;
+    char *abspath = NULL;
 
     if (!a)
     {
         fprintf(stderr, "%s: malloc(3) auth: %s\n", __func__, strerror(errno));
-        goto failure;
+        goto end;
     }
 
     *a = (const struct auth){0};
@@ -525,25 +562,39 @@ struct auth *auth_alloc(const char *const dir)
     dynstr_init(&a->db);
     dynstr_init(&a->dir);
 
-    if (dynstr_append(&a->dir, "%s", dir))
+    if (*dir != '/' && !(abspath = resolve_cwd()))
     {
-        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
-        goto failure;
+        fprintf(stderr, "%s: resolve_cwd failed\n", __func__);
+        goto end;
     }
-    else if (dynstr_append(&a->db, "%s/db.json", dir))
+    else if (abspath && dynstr_append(&a->dir, "%s", abspath))
     {
-        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
-        goto failure;
+        fprintf(stderr, "%s: dynstr_append abspath failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&a->dir, "%s%s", abspath ? "/" : "", dir))
+    {
+        fprintf(stderr, "%s: dynstr_append dir failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&a->db, "%s/db.json", a->dir.str))
+    {
+        fprintf(stderr, "%s: dynstr_append db failed\n", __func__);
+        goto end;
     }
     else if (init_db(a))
     {
         fprintf(stderr, "%s: init_db failed\n", __func__);
-        goto failure;
+        goto end;
     }
 
-    return a;
+    ret = a;
 
-failure:
-    auth_free(a);
-    return NULL;
+end:
+    free(abspath);
+
+    if (!ret)
+        auth_free(a);
+
+    return ret;
 }

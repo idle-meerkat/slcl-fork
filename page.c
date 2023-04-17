@@ -681,7 +681,7 @@ end:
 static int common_head(struct html_node *const head, const char *const tl)
 {
     int ret = -1;
-    struct html_node *charset, *title, *viewport;
+    struct html_node *charset, *title, *viewport, *link;
     struct dynstr t;
 
     dynstr_init(&t);
@@ -694,6 +694,21 @@ static int common_head(struct html_node *const head, const char *const tl)
     else if (!(charset = html_node_add_child(head, "meta")))
     {
         fprintf(stderr, "%s: html_node_add_child charset failed\n", __func__);
+        goto end;
+    }
+    else if (!(link = html_node_add_child(head, "link")))
+    {
+        fprintf(stderr, "%s: html_node_add_child link failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(link, "href", "/style.css"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr href failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(link, "rel", "stylesheet"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr rel failed\n", __func__);
         goto end;
     }
     else if (html_node_add_attr(charset, "charset", "UTF-8"))
@@ -745,7 +760,7 @@ static struct html_node *resource_layout(const char *const dir,
 {
     const char *const fdir = dir + strlen("/user");
     struct html_node *const html = html_node_alloc("html"),
-        *ret = NULL, *head, *body;
+        *ret = NULL, *head, *body, *div;
 
     if (!html)
     {
@@ -762,7 +777,12 @@ static struct html_node *resource_layout(const char *const dir,
         fprintf(stderr, "%s: html_node_add_child body failed\n", __func__);
         goto end;
     }
-    else if (!(*table = html_node_add_child(body, "table")))
+    else if (!(div = html_node_add_child(body, "div")))
+    {
+        fprintf(stderr, "%s: html_node_add_child div failed\n", __func__);
+        goto end;
+    }
+    else if (!(*table = html_node_add_child(div, "table")))
     {
         fprintf(stderr, "%s: html_node_add_child table failed\n", __func__);
         goto end;
@@ -1209,18 +1229,42 @@ int page_bad_request(struct http_response *const r)
 int page_style(struct http_response *const r)
 {
     static const char body[] =
-    "body"
+    "body, input\n"
     "{\n"
-    "   display: flex;\n"
-    "   flex-direction: column;\n"
+    "    font-family: 'Courier New', Courier, monospace;\n"
     "}\n"
-    ".form-control\n"
+    "td\n"
     "{\n"
-    "    display: block;\n"
+    "    font-size: 14px;\n"
+    "}\n"
+    "a\n"
+    "{\n"
+    "    text-decoration: none;\n"
+    "}\n"
+    "form\n"
+    "{\n"
+    "    display: grid;\n"
+    "}\n"
+    "form, label, table, input\n"
+    "{\n"
+    "    margin: auto;\n"
+    "}\n"
+    "div\n"
+    "{\n"
+    "    align-items: center;\n"
+    "    display: grid;\n"
+    "}\n"
+    "input\n"
+    "{\n"
+    "    margin:auto;\n"
     "    border: 1px solid;\n"
-    "    width: 60%;\n"
     "    border-radius: 8px;\n"
-    "    align-content: center;\n"
+    "}\n"
+    "header, footer\n"
+    "{\n"
+    "    display: flex;\n"
+    "    justify-content: center;\n"
+    "    text-decoration: auto;\n"
     "}\n";
 
     *r = (const struct http_response)

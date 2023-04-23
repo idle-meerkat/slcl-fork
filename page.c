@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 #define PROJECT_NAME "slcl"
@@ -243,11 +244,50 @@ end:
     return ret;
 }
 
+static int prepare_preview(struct html_node *const n,
+    const struct stat *const sb, const char *const dir, const char *const name)
+{
+    int ret = -1;
+    struct html_node *a;
+    struct dynstr d;
+
+    dynstr_init(&d);
+
+    if (!S_ISREG(sb->st_mode))
+        return 0;
+    else if (!(a = html_node_add_child(n, "a")))
+    {
+        fprintf(stderr, "%s: html_node_add_child form failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "%s%s?preview=1", dir, name))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_add_attr(a, "href", d.str))
+    {
+        fprintf(stderr, "%s: html_node_add_attr failed\n", __func__);
+        goto end;
+    }
+    else if (html_node_set_value(a, "Preview"))
+    {
+        fprintf(stderr, "%s: html_node_set_value value failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    dynstr_free(&d);
+    return ret;
+}
+
 static int add_element(struct html_node *const n, const char *const dir,
     const char *const res, const char *const name)
 {
     int ret = -1;
-    enum {NAME, SIZE, DATE, SHARE, COLUMNS};
+    enum {NAME, SIZE, DATE, SHARE, PREVIEW, COLUMNS};
     struct html_node *tr, *td[COLUMNS];
     struct dynstr path;
     const char *const sep = res[strlen(res) - 1] != '/' ? "/" : "";
@@ -297,6 +337,11 @@ static int add_element(struct html_node *const n, const char *const dir,
         goto end;
     }
     else if (prepare_share(td[SHARE], &sb, dir, name))
+    {
+        fprintf(stderr, "%s: prepare_date failed\n", __func__);
+        goto end;
+    }
+    else if (prepare_preview(td[PREVIEW], &sb, dir, name))
     {
         fprintf(stderr, "%s: prepare_date failed\n", __func__);
         goto end;
@@ -867,13 +912,12 @@ end:
     return ret;
 }
 
-static int list_dir(struct http_response *const r, const char *const dir,
-    const char *const root, const char *const res,
-    const struct page_quota *const q)
+static int list_dir(const struct page_resource *const pr)
 {
     int ret = -1;
     struct dynstr out;
-    struct html_node *table, *const html = resource_layout(dir, q, &table);
+    struct html_node *table,
+        *const html = resource_layout(pr->dir, pr->q, &table);
 
     dynstr_init(&out);
 
@@ -882,7 +926,7 @@ static int list_dir(struct http_response *const r, const char *const dir,
         fprintf(stderr, "%s: resource_layout failed\n", __func__);
         goto end;
     }
-    else if (add_elements(root, res, dir, table))
+    else if (add_elements(pr->root, pr->res, pr->dir, table))
     {
         fprintf(stderr, "%s: read_elements failed\n", __func__);
         goto end;
@@ -898,7 +942,7 @@ static int list_dir(struct http_response *const r, const char *const dir,
         goto end;
     }
 
-    *r = (const struct http_response)
+    *pr->r = (const struct http_response)
     {
         .status = HTTP_STATUS_OK,
         .buf.rw = out.str,
@@ -906,7 +950,7 @@ static int list_dir(struct http_response *const r, const char *const dir,
         .free = free
     };
 
-    if (http_response_add_header(r, "Content-Type", "text/html"))
+    if (http_response_add_header(pr->r, "Content-Type", "text/html"))
     {
         fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
         goto end;
@@ -924,7 +968,7 @@ end:
 }
 
 static int serve_file(struct http_response *const r,
-    const struct stat *const sb, const char *const res)
+    const struct stat *const sb, const char *const res, const bool preview)
 {
     int ret = -1;
     FILE *const f = fopen(res, "rb");
@@ -948,6 +992,14 @@ static int serve_file(struct http_response *const r,
     {
         fprintf(stderr, "%s: basename(3) failed\n", __func__);
         goto end;
+    }
+    else if (preview)
+    {
+        if (dynstr_append(&d, "inline"))
+        {
+            fprintf(stderr, "%s: dynstr_append inline failed\n", __func__);
+            goto end;
+        }
     }
     else if (dynstr_append(&d, "attachment; filename=\"%s\"", bn))
     {
@@ -1007,19 +1059,32 @@ static int page_not_found(struct http_response *const r)
     return 0;
 }
 
-int page_resource(struct http_response *const r, const char *const dir,
-    const char *const root, const char *const res,
-    const struct page_quota *const q)
+static bool preview(const struct page_resource *const pr)
+{
+    for (size_t i = 0; i < pr->n_args; i++)
+    {
+        const struct http_arg *const a = &pr->args[i];
+
+        if (!strcmp(a->key, "preview")
+            && (!strcmp(a->value, "1")
+                || !strcasecmp(a->value, "true")))
+            return true;
+    }
+
+    return false;
+}
+
+int page_resource(const struct page_resource *const pr)
 {
     struct stat sb;
 
-    if (stat(res, &sb))
+    if (stat(pr->res, &sb))
     {
         fprintf(stderr, "%s: stat(2) %s: %s\n",
-            __func__, res, strerror(errno));
+            __func__, pr->res, strerror(errno));
 
         if (errno == ENOENT)
-            return page_not_found(r);
+            return page_not_found(pr->r);
         else
             return -1;
     }
@@ -1027,9 +1092,9 @@ int page_resource(struct http_response *const r, const char *const dir,
     const mode_t m = sb.st_mode;
 
     if (S_ISDIR(m))
-        return list_dir(r, dir, root, res, q);
+        return list_dir(pr);
     else if (S_ISREG(m))
-        return serve_file(r, &sb, res);
+        return serve_file(pr->r, &sb, pr->res, preview(pr));
 
     fprintf(stderr, "%s: unexpected st_mode %jd\n", __func__, (intmax_t)m);
     return -1;
@@ -1101,7 +1166,7 @@ int page_public(struct http_response *const r, const char *const res)
         fprintf(stderr, "%s: resolve_link failed\n", __func__);
         goto end;
     }
-    else if (serve_file(r, &sb, path))
+    else if (serve_file(r, &sb, path, false))
     {
         fprintf(stderr, "%s: serve_file failed\n", __func__);
         goto end;

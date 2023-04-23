@@ -700,14 +700,20 @@ static int getnode(const struct http_payload *const p,
         goto end;
     }
 
-    const struct page_quota *const ppq = available ?
-        &(const struct page_quota)
-        {
-            .cur = cur,
-            .max = max
-        } : NULL;
+    const struct page_resource pr =
+    {
+        .r = r,
+        .args = p->args,
+        .n_args = p->n_args,
+        .dir = dir.str,
+        .root = root.str,
+        .res = d.str,
+        .q = available ?
+            &(const struct page_quota) {.cur = cur, .max = max }
+            : NULL
+    };
 
-    ret = page_resource(r, dir.str, root.str, d.str, ppq);
+    ret = page_resource(&pr);
 
 end:
     dynstr_free(&dir);

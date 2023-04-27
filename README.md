@@ -13,7 +13,7 @@ simplicity and efficiency.
 
 - Private access directory with file uploading, with configurable quota.
 - Read-only public file sharing.
-- Its own, tiny HTTP/1.0 and 1.1-compatible server.
+- Its own, tiny HTTP/1.1-compatible server.
 - A simple JSON file as the credentials database.
 - No JavaScript.
 

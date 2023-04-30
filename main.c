@@ -150,24 +150,17 @@ static int append_form(struct form **const forms, const char **const s,
     *forms = fs;
     f = &(*forms)[(*n)++];
 
+    /* HTML input forms use '+' for whitespace, rather than %20. */
     *f = (const struct form)
     {
-        .key = http_decode_url(key),
-        .value = http_decode_url(value)
+        .key = http_decode_url(key, true),
+        .value = http_decode_url(value, true)
     };
 
     if (!f->key || !f->value)
     {
         fprintf(stderr, "%s: http_decode_url key/value failed\n", __func__);
         goto end;
-    }
-
-    /* HTML input forms use '+' for whitespace, rather than %20. */
-    {
-        char *c = f->value;
-
-        while ((c = strchr(c, '+')))
-            *c = ' ';
     }
 
     *s = end;

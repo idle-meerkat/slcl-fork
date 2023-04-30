@@ -15,7 +15,13 @@ fi
 DIR=$1
 
 echo Username: >&2
-read -r USER
+IFS= read -r USER
+
+if printf '%s' "$USER" | grep -qe '[[:space:]]'
+then
+    echo Username cannot contain whitespaces >&2
+    exit 1
+fi
 
 DB="$DIR/db.json"
 
@@ -26,21 +32,21 @@ then
 fi
 
 echo Password: >&2
-read -r PWD
+IFS= read -r PWD
 echo "Quota, in MiB (leave empty for unlimited quota):" >&2
 read -r QUOTA
 
-PWD=$(printf '%s' $PWD | xxd -p | tr -d '\n')
+PWD=$(printf '%s' "$PWD" | xxd -p | tr -d '\n')
 SALT=$(openssl rand 32 | xxd -p | tr -d '\n')
 KEY=$(openssl rand 32 | xxd -p | tr -d '\n')
-PWD=$(printf '%s%s' $SALT $PWD)
+PWD=$(printf '%s%s' $SALT "$PWD")
 
 ROUNDS=1000
 
 for i in $(seq $ROUNDS)
 do
     printf "\r%d/$ROUNDS" $i >&2
-    PWD=$(printf '%s' $PWD | xxd -p -r | sha256sum | cut -d' ' -f1)
+    PWD=$(printf '%s' "$PWD" | xxd -p -r | sha256sum | cut -d' ' -f1)
 done
 
 echo >&2
@@ -56,7 +62,7 @@ trap cleanup EXIT
 jq ".users += [
 {
     \"name\": \"$USER\",
-    \"password\": \"$PWD\",
+    \"password\": \""$PWD"\",
     \"salt\": \"$SALT\",
     \"key\": \"$KEY\",
     \"quota\": \"$QUOTA\"

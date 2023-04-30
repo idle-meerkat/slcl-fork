@@ -1107,11 +1107,12 @@ static int parse_args(const int argc, char *const argv[],
 
             case 'p':
             {
-                const unsigned long portul = strtoul(optarg, NULL, 10);
+                char *endptr;
+                const unsigned long portul = strtoul(optarg, &endptr, 10);
 
-                if (portul > UINT16_MAX)
+                if (*endptr || portul > UINT16_MAX)
                 {
-                    fprintf(stderr, "%s: invalid port %lu\n", __func__, portul);
+                    fprintf(stderr, "%s: invalid port %s\n", __func__, optarg);
                     return -1;
                 }
 

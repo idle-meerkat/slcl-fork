@@ -34,7 +34,7 @@ static char *dump_db(const char *const path)
         fprintf(stderr, "%s: stat(2): %s\n", __func__, strerror(errno));
         goto end;
     }
-    else if (sb.st_size > SIZE_MAX)
+    else if (sb.st_size > SIZE_MAX - 1)
     {
         fprintf(stderr, "%s: %s too big (%llu bytes, %zu max)\n",
             __func__, path, (unsigned long long)sb.st_size, (size_t)SIZE_MAX);

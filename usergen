@@ -37,6 +37,8 @@ stty -echo
 echo Password: >&2
 IFS= read -r PWD
 stty echo
+# Force newline
+echo
 
 echo "Quota, in MiB (leave empty for unlimited quota):" >&2
 read -r QUOTA

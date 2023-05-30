@@ -1330,6 +1330,10 @@ int page_style(struct http_response *const r)
     "    display: flex;\n"
     "    justify-content: center;\n"
     "    text-decoration: auto;\n"
+    "}\n"
+    "tr:nth-child(even)\n"
+    "{\n"
+    "    background-color: lightgray;\n"
     "}\n";
 
     *r = (const struct http_response)

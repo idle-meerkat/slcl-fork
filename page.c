@@ -383,6 +383,11 @@ static int prepare_upload_form(struct html_node *const n, const char *const dir)
         fprintf(stderr, "%s: html_node_add_child submit failed\n", __func__);
         return -1;
     }
+    else if (html_node_add_attr(div, "class", "userform"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr div failed\n", __func__);
+        return -1;
+    }
     else if (html_node_add_attr(form, "method", "post"))
     {
         fprintf(stderr, "%s: html_node_add_attr method failed\n", __func__);
@@ -470,6 +475,11 @@ static int prepare_mkdir_form(struct html_node *const n, const char *const dir)
     else if (!(submit = html_node_add_child(form, "input")))
     {
         fprintf(stderr, "%s: html_node_add_child submit failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(div, "class", "userform"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr div failed\n", __func__);
         return -1;
     }
     else if (html_node_add_attr(form, "method", "post"))
@@ -577,6 +587,11 @@ static int prepare_quota_form(struct html_node *const n,
         fprintf(stderr, "%s: html_node_alloc progress failed\n", __func__);
         goto end;
     }
+    else if (html_node_add_attr(div, "class", "userform"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr div failed\n", __func__);
+        return -1;
+    }
     else if (html_node_add_attr(progress, "value", cur_nu))
     {
         fprintf(stderr, "%s: html_node_add_attr value failed\n", __func__);
@@ -645,6 +660,11 @@ static int prepare_logout_form(struct html_node *const n)
     else if (!(input = html_node_add_child(form, "input")))
     {
         fprintf(stderr, "%s: html_node_add_child input failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(div, "class", "userform"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr div failed\n", __func__);
         return -1;
     }
     else if (html_node_add_attr(form, "method", "post"))
@@ -1305,6 +1325,10 @@ int page_style(struct http_response *const r)
     "a\n"
     "{\n"
     "    text-decoration: none;\n"
+    "}\n"
+    ".userform\n"
+    "{\n"
+    "    padding: 4px;\n"
     "}\n"
     "form, label, table, input\n"
     "{\n"

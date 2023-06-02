@@ -35,7 +35,7 @@
     "<header>\n" \
     "   <a href=\"" PROJECT_URL "\">" PROJECT_NAME "</a>, a suckless cloud\n" \
     "</header>\n" \
-    "   <form action=\"/login\" method=\"post\">\n" \
+    "   <form class=\"loginform\" action=\"/login\" method=\"post\">\n" \
     "       <label for=\"username\">Username:</label>\n" \
     "       <input type=\"text\" class=\"form-control\"\n" \
     "           id=\"username\" name=\"username\" autofocus><br>\n" \
@@ -1329,6 +1329,10 @@ int page_style(struct http_response *const r)
     ".userform\n"
     "{\n"
     "    padding: 4px;\n"
+    "}\n"
+    ".loginform\n"
+    "{\n"
+    "    display: grid;\n"
     "}\n"
     "form, label, table, input\n"
     "{\n"

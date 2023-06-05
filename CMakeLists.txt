@@ -12,6 +12,7 @@ add_executable(${PROJECT_NAME}
     main.c
     page.c
     server.c
+    wildcard_cmp.c
 )
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall)
 target_compile_definitions(${PROJECT_NAME} PRIVATE _FILE_OFFSET_BITS=64)

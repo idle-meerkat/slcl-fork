@@ -6,6 +6,7 @@
 #include "hex.h"
 #include "http.h"
 #include "page.h"
+#include "wildcard_cmp.h"
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <dynstr.h>

@@ -1103,7 +1103,7 @@ int page_resource(const struct page_resource *const pr)
         fprintf(stderr, "%s: stat(2) %s: %s\n",
             __func__, pr->res, strerror(errno));
 
-        if (errno == ENOENT)
+        if (errno == ENOENT || errno == ENOTDIR)
             return page_not_found(pr->r);
         else
             return -1;

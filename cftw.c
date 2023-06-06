@@ -29,12 +29,13 @@ int cftw(const char *const dirpath, int (*const fn)(const char *,
         if (!strcmp(path, ".") || !strcmp(path, ".."))
             continue;
 
+        const char *const sep = dirpath[strlen(dirpath) - 1] == '/' ? "" : "/";
         struct stat sb;
         struct dynstr d;
 
         dynstr_init(&d);
 
-        if (dynstr_append(&d, "%s/%s", dirpath, path))
+        if (dynstr_append(&d, "%s%s%s", dirpath, sep, path))
         {
             fprintf(stderr, "%s: dynstr_append failed\n", __func__);
             return -1;

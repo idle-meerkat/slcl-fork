@@ -465,19 +465,237 @@ end:
     return ret;
 }
 
+static int check_search_input(const struct http_payload *const p,
+    int (**const f)(struct http_response *), const struct auth *const a,
+    char **const dir, struct dynstr *const res)
+{
+    int ret = auth_cookie(a, &p->cookie);
+    struct form *forms = NULL;
+    size_t n = 0;
+
+    if (ret < 0)
+    {
+        fprintf(stderr, "%s: auth_cookie failed\n", __func__);
+        goto end;
+    }
+    else if (ret)
+    {
+        *f = page_forbidden;
+        goto end;
+    }
+    else if ((ret = get_forms(p, &forms, &n)))
+    {
+        if (ret < 0)
+            fprintf(stderr, "%s: get_forms failed\n", __func__);
+        else
+            *f = page_bad_request;
+
+        goto end;
+    }
+
+    const char *tdir = NULL, *tres = NULL;
+
+    for (size_t i = 0; i < n; i++)
+    {
+        const struct form *const f = &forms[i];
+
+        if (!strcmp(f->key, "dir"))
+            tdir = f->value;
+        else if (!strcmp(f->key, "name"))
+            tres = f->value;
+    }
+
+    if (!tdir)
+    {
+        fprintf(stderr, "%s: expected non-null directory\n", __func__);
+        ret = 1;
+        *f = page_bad_request;
+        goto end;
+    }
+    else if (!tres)
+    {
+        fprintf(stderr, "%s: expected non-null resource\n", __func__);
+        ret = 1;
+        *f = page_bad_request;
+        goto end;
+    }
+    else if (path_isrel(tdir) || *tdir != '/' || tdir[strlen(tdir) - 1] != '/')
+    {
+        fprintf(stderr, "%s: invalid directory %s\n", __func__, tdir);
+        ret = 1;
+        *f = page_bad_request;
+        goto end;
+    }
+    else if (strchr(tres, '/') || path_isrel(tres))
+    {
+        fprintf(stderr, "%s: invalid resource %s\n", __func__, tres);
+        ret = 1;
+        *f = page_bad_request;
+        goto end;
+    }
+    else if (!(*dir = strdup(tdir)))
+    {
+        fprintf(stderr, "%s: strdup(3) dir: %s\n", __func__, strerror(errno));
+        ret = -1;
+        goto end;
+    }
+    else if (dynstr_append(res, "*%s*", tres))
+    {
+        fprintf(stderr, "%s: dynstr_append failed\n", __func__);
+        ret = -1;
+        goto end;
+    }
+
+end:
+    forms_free(forms, n);
+    return ret;
+}
+
+static void search_result_free(struct page_search_result *const r)
+{
+    if (r)
+        free(r->name);
+}
+
+static void search_results_free(struct page_search *const s)
+{
+    if (s)
+    {
+        for (size_t i = 0; i < s->n; i++)
+            search_result_free(&s->results[i]);
+
+        free(s->results);
+    }
+}
+
+struct search_args
+{
+    const char *root, *res;
+    struct page_search *s;
+};
+
+static int search_fn(const char *const fpath, const struct stat *const sb,
+    void *const user)
+{
+    const struct search_args *const sa = user;
+    const char *rel = fpath + strlen(sa->root);
+    struct page_search *const res = sa->s;
+    struct page_search_result *results = NULL, *r = NULL;
+
+    rel += strspn(rel, "/");
+
+    if (wildcard_cmp(rel, sa->res, false))
+        return 0;
+    else if (!(results = realloc(res->results,
+        (res->n + 1) * sizeof *res->results)))
+    {
+        fprintf(stderr, "%s: realloc(3): %s\n", __func__, strerror(errno));
+        goto failure;
+    }
+
+    r = &results[res->n];
+    *r = (const struct page_search_result)
+    {
+        .name = strdup(rel)
+    };
+
+    if (!r->name)
+    {
+        fprintf(stderr, "%s: strdup(3): %s", __func__, strerror(errno));
+        goto failure;
+    }
+
+    res->results = results;
+    res->n++;
+    return 0;
+
+failure:
+    free(results);
+    search_result_free(r);
+    return -1;
+}
+
+static int do_search(const char *const abs, const char *const root,
+    const char *const res, struct page_search *const s)
+{
+    struct search_args sa =
+    {
+        .root = root,
+        .res = res,
+        .s = s
+    };
+
+    s->root = root;
+
+    if (cftw(abs, search_fn, &sa))
+    {
+        fprintf(stderr, "%s: cftw failed\n", __func__);
+        return -1;
+    }
+
+    return 0;
+}
+
 static int search(const struct http_payload *const p,
     struct http_response *const r, void *const user)
 {
-    struct auth *const a = user;
+    int ret = -1;
+    const struct auth *const a = user;
+    const char *const username = p->cookie.field, *const root = auth_dir(a);
+    struct page_search s = {0};
+    int (*f)(struct http_response *);
+    char *dir = NULL;
+    struct dynstr userd, d, res;
 
-    if (auth_cookie(a, &p->cookie))
+    dynstr_init(&userd);
+    dynstr_init(&d);
+    dynstr_init(&res);
+
+    if (!root)
     {
-        fprintf(stderr, "%s: auth_cookie failed\n", __func__);
-        return page_forbidden(r);
+        fprintf(stderr, "%s: auth_dir failed\n", __func__);
+        goto end;
+    }
+    else if ((ret = check_search_input(p, &f, a, &dir, &res)))
+    {
+        if (ret < 0)
+            fprintf(stderr, "%s: check_search_input failed\n", __func__);
+        else if ((ret = f(r)))
+            fprintf(stderr, "%s: check_search_input callback failed\n",
+                __func__);
+
+        goto end;
+    }
+    else if (dynstr_append(&userd, "%s/user/%s", root, username))
+    {
+        fprintf(stderr, "%s: dynstr_append userd failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&d, "%s/%s", userd.str, dir + strspn(dir, "/")))
+    {
+        fprintf(stderr, "%s: dynstr_append d failed\n", __func__);
+        goto end;
+    }
+    else if ((ret = do_search(d.str, userd.str, res.str, &s)))
+    {
+        if (ret < 0)
+            fprintf(stderr, "%s: do_search failed\n", __func__);
+
+        goto end;
+    }
+    else if ((ret = page_search(r, &s)))
+    {
+        fprintf(stderr, "%s: page_search failed\n", __func__);
+        goto end;
     }
 
-    fprintf(stderr, "%s: TODO\n", __func__);
-    return -1;
+end:
+    free(dir);
+    dynstr_free(&userd);
+    dynstr_free(&d);
+    dynstr_free(&res);
+    search_results_free(&s);
+    return ret;
 }
 
 static int share(const struct http_payload *const p,

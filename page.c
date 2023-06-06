@@ -354,6 +354,91 @@ end:
     return ret;
 }
 
+static int prepare_search_form(struct html_node *const n, const char *const dir)
+{
+    struct html_node *div, *form, *hidden, *submit, *input;
+
+    if (!(div = html_node_add_child(n, "div")))
+    {
+        fprintf(stderr, "%s: html_node_add_child div failed\n", __func__);
+        return -1;
+    }
+    else if (!(form = html_node_add_child(div, "form")))
+    {
+        fprintf(stderr, "%s: html_node_add_child form failed\n", __func__);
+        return -1;
+    }
+    else if (!(input = html_node_add_child(form, "input")))
+    {
+        fprintf(stderr, "%s: html_node_add_child input failed\n", __func__);
+        return -1;
+    }
+    else if (!(hidden = html_node_add_child(form, "input")))
+    {
+        fprintf(stderr, "%s: html_node_add_child hidden failed\n", __func__);
+        return -1;
+    }
+    else if (!(submit = html_node_add_child(form, "input")))
+    {
+        fprintf(stderr, "%s: html_node_add_child submit failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(div, "class", "userform"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr method failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(form, "method", "post"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr method failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(form, "action", "/search"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr method failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(hidden, "type", "hidden"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr hidden failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(hidden, "name", "dir"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr dir failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(hidden, "value", dir))
+    {
+        fprintf(stderr, "%s: html_node_add_attr hidden value failed\n",
+            __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(submit, "type", "submit"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr submit failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(submit, "value", "Search"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr submit value failed\n",
+            __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(input, "type", "text"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr text failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(input, "name", "name"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr name failed\n", __func__);
+        return -1;
+    }
+
+    return 0;
+}
+
 static int prepare_upload_form(struct html_node *const n, const char *const dir)
 {
     struct html_node *div, *hidden, *form, *submit, *input;
@@ -857,6 +942,11 @@ static struct html_node *resource_layout(const char *const dir,
         fprintf(stderr, "%s: common_head failed\n", __func__);
         goto end;
     }
+    else if (prepare_search_form(body, fdir))
+    {
+        fprintf(stderr, "%s: prepare_search_form failed\n", __func__);
+        goto end;
+    }
     else if (prepare_upload_form(body, fdir))
     {
         fprintf(stderr, "%s: prepare_upload_form failed\n", __func__);
@@ -1343,7 +1433,7 @@ int page_style(struct http_response *const r)
     "    align-items: center;\n"
     "    display: grid;\n"
     "}\n"
-    "input\n"
+    "input, .abutton\n"
     "{\n"
     "    margin: auto;\n"
     "    border: 1px solid;\n"
@@ -1538,6 +1628,154 @@ int page_quota_exceeded(struct http_response *const r,
 end:
     html_node_free(html);
     dynstr_free(&msg);
+
+    if (ret)
+        dynstr_free(&out);
+
+    return ret;
+}
+
+static int add_search_results(struct html_node *const n,
+    const struct page_search *const s)
+{
+    struct html_node *table;
+
+    if (!(table = html_node_add_child(n, "table")))
+    {
+        fprintf(stderr, "%s: html_node_add_child table failed\n", __func__);
+        return -1;
+    }
+
+    for (size_t i = 0; i < s->n; i++)
+    {
+        const struct page_search_result *const r = &s->results[i];
+
+        if (add_element(table, "/user/", s->root, r->name))
+        {
+            fprintf(stderr, "%s: add_element failed\n", __func__);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int prepare_back_button(struct html_node *const n)
+{
+    struct html_node *div, *a;
+
+    if (!(div = html_node_add_child(n, "div")))
+    {
+        fprintf(stderr, "%s: html_node_add_child div failed\n", __func__);
+        return -1;
+    }
+    else if (!(a = html_node_add_child(div, "a")))
+    {
+        fprintf(stderr, "%s: html_node_add_child a failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(div, "class", "userform"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr div failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(a, "class", "abutton"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr a class failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_add_attr(a, "href", "/user/"))
+    {
+        fprintf(stderr, "%s: html_node_add_attr a href failed\n", __func__);
+        return -1;
+    }
+    else if (html_node_set_value(a, "Back"))
+    {
+        fprintf(stderr, "%s: html_node_set_value failed\n", __func__);
+        return -1;
+    }
+
+    return 0;
+}
+
+int page_search(struct http_response *const r,
+    const struct page_search *const s)
+{
+    int ret = -1;
+    struct dynstr out;
+    struct html_node *const html = html_node_alloc("html"), *head, *body;
+
+    dynstr_init(&out);
+
+    if (!html)
+    {
+        fprintf(stderr, "%s: html_node_alloc failed\n", __func__);
+        goto end;
+    }
+    else if (!(head = html_node_add_child(html, "head")))
+    {
+        fprintf(stderr, "%s: html_node_add_child head failed\n", __func__);
+        goto end;
+    }
+    else if (!(body = html_node_add_child(html, "body")))
+    {
+        fprintf(stderr, "%s: html_node_add_child body failed\n", __func__);
+        goto end;
+    }
+    else if (common_head(head, NULL))
+    {
+        fprintf(stderr, "%s: common_head failed\n", __func__);
+        goto end;
+    }
+    else if (s->n && add_search_results(body, s))
+    {
+        fprintf(stderr, "%s: add_search_results failed\n", __func__);
+        goto end;
+    }
+    else if (!s->n && html_node_set_value(body, "No results found"))
+    {
+        fprintf(stderr, "%s: html_node_set_value msg failed\n", __func__);
+        goto end;
+    }
+    else if (prepare_back_button(body))
+    {
+        fprintf(stderr, "%s: prepare_back_button failed\n", __func__);
+        goto end;
+    }
+    else if (prepare_footer(body))
+    {
+        fprintf(stderr, "%s: prepare_footer failed\n", __func__);
+        goto end;
+    }
+    else if (dynstr_append(&out, DOCTYPE_TAG))
+    {
+        fprintf(stderr, "%s: dynstr_append out failed\n", __func__);
+        goto end;
+    }
+    else if (html_serialize(html, &out))
+    {
+        fprintf(stderr, "%s: html_serialize failed\n", __func__);
+        goto end;
+    }
+
+    *r = (const struct http_response)
+    {
+        .status = HTTP_STATUS_PAYLOAD_TOO_LARGE,
+        .buf.rw = out.str,
+        .n = out.len,
+        .free = free
+    };
+
+    if (http_response_add_header(r, "Content-Type", "text/html"))
+    {
+        fprintf(stderr, "%s: http_response_add_header failed\n", __func__);
+        goto end;
+    }
+
+    ret = 0;
+
+end:
+    html_node_free(html);
 
     if (ret)
         dynstr_free(&out);

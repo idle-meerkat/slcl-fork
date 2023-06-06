@@ -1314,7 +1314,7 @@ int page_bad_request(struct http_response *const r)
 int page_style(struct http_response *const r)
 {
     static const char body[] =
-    "body, input\n"
+    "body\n"
     "{\n"
     "    font-family: 'Courier New', Courier, monospace;\n"
     "}\n"
@@ -1334,7 +1334,7 @@ int page_style(struct http_response *const r)
     "{\n"
     "    display: grid;\n"
     "}\n"
-    "form, label, table, input\n"
+    "form, label, table\n"
     "{\n"
     "    margin: auto;\n"
     "}\n"
@@ -1345,7 +1345,7 @@ int page_style(struct http_response *const r)
     "}\n"
     "input\n"
     "{\n"
-    "    margin:auto;\n"
+    "    margin: auto;\n"
     "    border: 1px solid;\n"
     "    border-radius: 8px;\n"
     "}\n"
